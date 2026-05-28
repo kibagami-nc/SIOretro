@@ -1,0 +1,49 @@
+:root {
+  --pixel-font: 'Press Start 2P', 'Courier New', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #0a0c12;
+  color: #e5e7eb;
+  overflow: hidden;
+}
+
+body {
+  background:
+    radial-gradient(circle at 20% 10%, #161a26 0%, transparent 45%),
+    radial-gradient(circle at 80% 90%, #15131f 0%, transparent 45%),
+    #0a0c12;
+}
+
+app-root {
+  display: block;
+  height: 100%;
+}
+
+/* léger effet scanlines rétro sur toute l'app */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.12) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+}
+
+button {
+  font-family: var(--pixel-font);
+}

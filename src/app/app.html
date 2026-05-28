@@ -1,0 +1,11 @@
+@switch (view()) {
+  @case ('game') {
+    <app-game [character]="selected()" (exit)="onExit()" />
+  }
+  @case ('editor') {
+    <app-editor (play)="onEditorPlay()" (exit)="onExit()" />
+  }
+  @default {
+    <app-menu (play)="onPlay($event)" (edit)="onEdit()" />
+  }
+}

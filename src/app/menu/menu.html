@@ -1,0 +1,62 @@
+<div class="menu" [style.--c]="accent()">
+  <header class="title">
+    <h1>SIO<span>RETRO</span></h1>
+    <p>— Sélection de l'alternant · BTS SIO —</p>
+  </header>
+
+  <div class="stage-layout">
+    <!-- scène 3D -->
+    <section class="stage">
+      <div class="glow"></div>
+      <div class="big-letter">{{ selected().filiere }}</div>
+      <canvas #preview class="preview-canvas"></canvas>
+    </section>
+
+    <!-- fiche du perso -->
+    <section class="sheet">
+      <div class="name-line">
+        <h2 class="hero-name">{{ selected().name }}</h2>
+        <span class="badge">{{ selected().filiere }}</span>
+      </div>
+      <p class="role">{{ selected().role }}</p>
+
+      <div class="power">
+        <div class="power-head">⚡ {{ selected().powerName }}</div>
+        <p class="power-desc">{{ selected().powerDesc }}</p>
+      </div>
+
+      <div class="stats">
+        @for (s of statBars(); track s.label) {
+          <div class="stat-row">
+            <span class="stat-label">{{ s.label }}</span>
+            <span class="bar"><span class="fill" [style.width.%]="s.value"></span></span>
+            <span class="stat-val">{{ s.value }}</span>
+          </div>
+        }
+      </div>
+
+      <div class="actions">
+        <button class="play-btn" (click)="start()">▶ JOUER</button>
+        <button class="edit-btn" (click)="openEditor()">✎ ÉDITEUR</button>
+      </div>
+    </section>
+  </div>
+
+  <!-- roster horizontal -->
+  <footer class="roster">
+    @for (c of characters; track c.id) {
+      <button
+        class="tile"
+        [class.active]="c.id === selectedId()"
+        [style.--tc]="color(c.color)"
+        (click)="select(c)"
+      >
+        <span class="av"></span>
+        <span class="tname">{{ c.name }}</span>
+        <span class="tfil">{{ c.filiere }}</span>
+      </button>
+    }
+  </footer>
+
+  <div class="hint">ZQSD bouger · souris regarder · E interagir · Échap pause</div>
+</div>

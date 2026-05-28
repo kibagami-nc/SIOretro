@@ -1,0 +1,38 @@
+<div class="editor">
+  <canvas #canvas></canvas>
+
+  <!-- barre d'outils -->
+  <div class="toolbar">
+    <div class="title">ÉDITEUR DE MAP</div>
+    <div class="palette">
+      @for (t of tools; track t.key) {
+        <button class="tool" [class.active]="tool() === t.key" (click)="setTool(t.key)">
+          {{ t.label }}
+        </button>
+      }
+    </div>
+    <div class="actions">
+      <button class="act" (click)="rotate()">⟳ Pivoter (R)</button>
+      <button class="act danger" [disabled]="!hasSelection()" (click)="remove()">🗑 Supprimer</button>
+    </div>
+    <div class="actions">
+      <button class="act" (click)="resetDefault()">↺ Défaut</button>
+      <button class="act" (click)="clearAll()">Vider</button>
+    </div>
+    <div class="actions">
+      <button class="act save" (click)="save()">{{ saved() ? '✓ Sauvé !' : '💾 Sauvegarder' }}</button>
+      <button class="act play" (click)="testPlay()">▶ Tester</button>
+    </div>
+    <div class="actions">
+      <button class="act" (click)="export()">⤓ Exporter (.json)</button>
+    </div>
+    <button class="act back" (click)="back()">← Menu</button>
+    <div class="count">{{ count() }} objets</div>
+  </div>
+
+  <!-- aide -->
+  <div class="help">
+    <p><b>Clic gauche</b> : poser / sélectionner · <b>glisser</b> : tourner la caméra · <b>molette</b> : zoom</p>
+    <p><b>Près d'un mur</b> : l'objet s'aimante et se colle au mur · <b>R</b> pivoter · <b>Suppr</b> supprimer · <b>flèches</b> déplacer</p>
+  </div>
+</div>

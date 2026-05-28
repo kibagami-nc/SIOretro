@@ -1,0 +1,86 @@
+<div class="stage">
+  <canvas #canvas></canvas>
+
+  @if (locked() && !dialogue()) {
+    <div class="crosshair"></div>
+  }
+
+  <!-- HUD haut -->
+  <div class="hud">
+    <div class="hud-left" [style.borderColor]="color()">
+      <span class="dot" [style.background]="color()"></span>
+      <span class="name">{{ character().name }}</span>
+      <span class="filiere">{{ character().filiere }}</span>
+    </div>
+    <div class="hud-center">
+      <div class="zone">{{ zone() }}</div>
+      <div class="objective">{{ objective() }}</div>
+      @if (showProgress()) {
+        <div class="progress">👥 {{ talked() }} / {{ talkedTotal() }} camarades</div>
+      }
+    </div>
+    <div class="hud-right">
+      <div class="stat">⏱ {{ timeLabel() }}</div>
+    </div>
+  </div>
+
+  <!-- invite d'interaction -->
+  @if (locked() && prompt() && !dialogue()) {
+    <div class="prompt">{{ prompt() }}</div>
+  }
+
+  <!-- boîte de dialogue -->
+  @if (dialogue(); as d) {
+    <div class="dialogue">
+      <div class="box" [style.borderColor]="dialogueColor()">
+        @if (d.name) {
+          <div class="speaker" [style.color]="dialogueColor()">{{ d.name }}</div>
+        }
+        <p class="line">{{ d.line }}</p>
+        <div class="cont">[E] continuer</div>
+      </div>
+    </div>
+  }
+
+  <!-- intro -->
+  @if (showIntro()) {
+    <div class="overlay">
+      <div class="panel">
+        <h2>Soutenance BTS SIO</h2>
+        <p class="sub">Tu joues <b [style.color]="color()">{{ character().name }}</b> ({{ character().filiere }})</p>
+        <p>C'est le jour de la soutenance au <b>Lycée Dick Ukeiwë</b>.<br />Fais le tour de la salle et parle à tous tes camarades !</p>
+        <div class="keys">
+          <span><kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> se déplacer</span>
+          <span><kbd>Souris</kbd> regarder · <kbd>E</kbd> parler / interagir</span>
+          <span><kbd>Échap</kbd> pause</span>
+        </div>
+        <button class="btn" (click)="play()">CLIQUER POUR JOUER</button>
+      </div>
+    </div>
+  }
+
+  <!-- pause -->
+  @if (showPause()) {
+    <div class="overlay">
+      <div class="panel">
+        <h2>Pause</h2>
+        <p>{{ objective() }}</p>
+        <p>⏱ {{ timeLabel() }}</p>
+        <button class="btn" (click)="play()">REPRENDRE</button>
+        <button class="btn ghost" (click)="quit()">QUITTER (MENU)</button>
+      </div>
+    </div>
+  }
+
+  <!-- victoire -->
+  @if (won()) {
+    <div class="overlay">
+      <div class="panel win">
+        <h2>SOUTENANCE RÉUSSIE !</h2>
+        <p>Toute la classe a assuré 🎓</p>
+        <p class="big">Temps : {{ winLabel() }}</p>
+        <button class="btn" (click)="quit()">RETOUR AU MENU</button>
+      </div>
+    </div>
+  }
+</div>
