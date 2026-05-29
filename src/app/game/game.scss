@@ -150,6 +150,70 @@ canvas {
   }
 }
 
+/* combat contre Joey */
+.combat {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 7%;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+}
+.combat-box {
+  font-family: var(--pixel-font);
+  width: min(560px, 90vw);
+  background: rgba(10, 12, 22, 0.94);
+  border: 3px solid #ef4444;
+  box-shadow: 0 0 0 4px #000;
+  padding: 16px 20px;
+  color: #f1f5f9;
+}
+.combat-box .vs {
+  text-align: center;
+  font-size: 14px;
+  letter-spacing: 2px;
+  color: #fca5a5;
+  margin-bottom: 12px;
+}
+.combat-box .fighter {
+  margin-bottom: 10px;
+}
+.combat-box .fname {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.combat-box .bar {
+  height: 14px;
+  background: #23262e;
+  border: 2px solid #000;
+}
+.combat-box .bar span {
+  display: block;
+  height: 100%;
+  transition: width 0.12s steps(6);
+}
+.combat-box .bar.enemy span {
+  background: #ef4444;
+}
+.combat-box .bar.player span {
+  background: #4ade80;
+}
+.combat-box .clog {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.6;
+  min-height: 2.4em;
+}
+.combat-box .cont {
+  margin-top: 8px;
+  text-align: right;
+  font-size: 10px;
+  color: #fde68a;
+  animation: blink 1s steps(2, start) infinite;
+}
+
 .overlay {
   position: absolute;
   inset: 0;

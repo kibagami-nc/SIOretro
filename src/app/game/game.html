@@ -15,9 +15,6 @@
     <div class="hud-center">
       <div class="zone">{{ zone() }}</div>
       <div class="objective">{{ objective() }}</div>
-      @if (showProgress()) {
-        <div class="progress">👥 {{ talked() }} / {{ talkedTotal() }} camarades</div>
-      }
     </div>
     <div class="hud-right">
       <div class="stat">⏱ {{ timeLabel() }}</div>
@@ -27,6 +24,25 @@
   <!-- invite d'interaction -->
   @if (locked() && prompt() && !dialogue()) {
     <div class="prompt">{{ prompt() }}</div>
+  }
+
+  <!-- combat contre Joey -->
+  @if (combat(); as c) {
+    <div class="combat">
+      <div class="combat-box" [style.borderColor]="combatColor()">
+        <div class="vs">⚔️ COMBAT</div>
+        <div class="fighter">
+          <span class="fname" [style.color]="combatColor()">{{ c.name }}</span>
+          <div class="bar enemy"><span [style.width.%]="enemyHpPct()"></span></div>
+        </div>
+        <div class="fighter">
+          <span class="fname">{{ character().name }} (toi)</span>
+          <div class="bar player"><span [style.width.%]="playerHpPct()"></span></div>
+        </div>
+        <p class="clog">{{ c.log }}</p>
+        <div class="cont">[E] Attaquer</div>
+      </div>
+    </div>
   }
 
   <!-- boîte de dialogue -->
@@ -48,7 +64,7 @@
       <div class="panel">
         <h2>Soutenance BTS SIO</h2>
         <p class="sub">Tu joues <b [style.color]="color()">{{ character().name }}</b> ({{ character().filiere }})</p>
-        <p>C'est le jour de la soutenance au <b>Lycée Dick Ukeiwë</b>.<br />Fais le tour de la salle et parle à tous tes camarades !</p>
+        <p>C'est le jour de la soutenance au <b>Lycée Dick Ukeiwë</b>.<br />{{ objective() }}</p>
         <div class="keys">
           <span><kbd>Z</kbd><kbd>Q</kbd><kbd>S</kbd><kbd>D</kbd> se déplacer</span>
           <span><kbd>Souris</kbd> regarder · <kbd>E</kbd> parler / interagir</span>
@@ -76,8 +92,8 @@
   @if (won()) {
     <div class="overlay">
       <div class="panel win">
-        <h2>SOUTENANCE RÉUSSIE !</h2>
-        <p>Toute la classe a assuré 🎓</p>
+        <h2>{{ winTitle() }}</h2>
+        <p>{{ winSub() }}</p>
         <p class="big">Temps : {{ winLabel() }}</p>
         <button class="btn" (click)="quit()">RETOUR AU MENU</button>
       </div>

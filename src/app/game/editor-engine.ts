@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ADJACENT_DEPTH, buildClassroomShell, ROOM } from './classroom';
+import { buildClassroomShell } from './classroom';
+import { inAnyRoom, PLAN, snapWalls, type SnapWall } from './floorplan';
 import {
   buildItem,
   clone,
@@ -13,7 +14,8 @@ import {
   saveLayout,
 } from './furniture';
 
-export type Tool = ItemType | 'select';
+/** Outil de pose : un type d'objet, la sélection, ou un PNJ précis (`npc:<id>`). */
+export type Tool = ItemType | 'select' | `npc:${string}`;
 
 export interface EditorCallbacks {
   onChange: (count: number, hasSelection: boolean) => void;
@@ -21,6 +23,8 @@ export interface EditorCallbacks {
 }
 
 const SNAP = 0.5;
+/** hauteur où poser switch / câble pour qu'ils reposent sur le plateau d'une table */
+const TABLE_TOP = 0.72;
 
 interface Entry {
   item: MapItem;
@@ -37,6 +41,10 @@ export class EditorEngine {
   private entries: Entry[] = [];
 
   private tool: Tool = 'desk';
+  /** type d'objet effectivement posé (base, sans l'id de PNJ) */
+  private placeType: ItemType = 'desk';
+  /** id du personnage à poser quand l'outil est un PNJ */
+  private placeChar?: string;
   private placeRot = 0;
   private ghost: THREE.Group | null = null;
   private ghostPos = new THREE.Vector3();
@@ -74,23 +82,24 @@ export class EditorEngine {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.scene.background = new THREE.Color(0x10131a);
 
-    const midX = ADJACENT_DEPTH / 2; // centre des deux salles réunies
-    this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 240);
-    this.camera.position.set(midX, 22, 18);
+    const cx = PLAN.cx; // centre du plan complet (toutes les salles + couloir)
+    const cz = PLAN.cz;
+    this.camera = new THREE.PerspectiveCamera(55, 1, 0.1, 300);
+    this.camera.position.set(cx, 34, cz + 24);
 
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
-    this.controls.target.set(midX, 0.5, 0);
+    this.controls.target.set(cx, 0.5, cz);
     this.controls.minDistance = 6;
-    this.controls.maxDistance = 70;
+    this.controls.maxDistance = 120;
     this.controls.maxPolarAngle = 1.45;
 
-    // décor : coquille des 2 salles + grille
+    // décor : coquille de toutes les salles + grille
     this.scene.add(buildClassroomShell().group);
     this.scene.add(this.itemsRoot);
-    const gridSize = ROOM.halfX * 2 + ADJACENT_DEPTH;
+    const gridSize = Math.ceil((Math.max(PLAN.spanX, PLAN.spanZ) + 6) / SNAP) * SNAP;
     const grid = new THREE.GridHelper(gridSize, Math.round(gridSize / SNAP), 0x3b4252, 0x2a2f3a);
-    grid.position.set(midX, 0.02, 0);
+    grid.position.set(cx, 0.02, cz);
     this.scene.add(grid);
 
     // lumières (sans ombres, pour la lisibilité)
@@ -126,8 +135,8 @@ export class EditorEngine {
   }
 
   private spawn(item: MapItem): Entry {
-    const object = buildItem(item.type, this.entries.length);
-    object.position.set(item.x, 0, item.z);
+    const object = buildItem(item.type, this.entries.length, item.char);
+    object.position.set(item.x, item.y ?? 0, item.z);
     object.rotation.y = item.rot;
     this.itemsRoot.add(object);
     const entry: Entry = { item, object };
@@ -172,10 +181,17 @@ export class EditorEngine {
     this.cb.onTool(t);
     if (t === 'select') {
       this.removeGhost();
-    } else {
-      this.deselect();
-      this.buildGhost(t);
+      return;
     }
+    if (t.startsWith('npc:')) {
+      this.placeType = 'npc';
+      this.placeChar = t.slice(4);
+    } else {
+      this.placeType = t as ItemType;
+      this.placeChar = undefined;
+    }
+    this.deselect();
+    this.buildGhost(this.placeType, this.placeChar);
   }
 
   rotate(): void {
@@ -193,11 +209,10 @@ export class EditorEngine {
   /** Recalcule la pose du fantôme (utile après un pivotement sans bouger la souris). */
   private refreshGhost(): void {
     const ghost = this.ghost;
-    const tool = this.tool;
-    if (!ghost || tool === 'select') return;
+    if (!ghost || this.tool === 'select') return;
     if (this.lastHit) {
-      const p = this.computePlacement(this.lastHit.x, this.lastHit.z, tool);
-      ghost.position.set(p.x, 0, p.z);
+      const p = this.computePlacement(this.lastHit.x, this.lastHit.z, this.placeType);
+      ghost.position.set(p.x, p.y ?? 0, p.z);
       ghost.rotation.y = p.rot;
       this.ghostValid = p.valid;
       this.tintGhost(p.valid);
@@ -221,13 +236,12 @@ export class EditorEngine {
   private pointerMove(e: PointerEvent): void {
     this.updatePointer(e);
     const ghost = this.ghost;
-    const tool = this.tool;
-    if (tool === 'select' || !ghost) return;
+    if (this.tool === 'select' || !ghost) return;
     const hit = this.raycastGround();
     if (!hit) return;
     this.lastHit = hit.clone();
-    const p = this.computePlacement(hit.x, hit.z, tool);
-    ghost.position.set(p.x, 0, p.z);
+    const p = this.computePlacement(hit.x, hit.z, this.placeType);
+    ghost.position.set(p.x, p.y ?? 0, p.z);
     ghost.rotation.y = p.rot;
     this.ghostValid = p.valid;
     this.tintGhost(p.valid);
@@ -237,17 +251,16 @@ export class EditorEngine {
     const moved = Math.hypot(e.clientX - this.downX, e.clientY - this.downY);
     if (this.downBtn !== 0 || moved > 6) return; // c'était un drag (orbite) ou clic droit
     this.updatePointer(e);
-    const tool = this.tool;
-    if (tool === 'select') {
+    if (this.tool === 'select') {
       this.pickItem();
       return;
     }
     const hit = this.raycastGround();
     if (!hit) return;
-    const p = this.computePlacement(hit.x, hit.z, tool);
+    const p = this.computePlacement(hit.x, hit.z, this.placeType);
     if (!p.valid) return;
-    if (tool === 'spawn') this.removeByType('spawn'); // un seul point de spawn
-    this.spawn({ type: tool, x: p.x, z: p.z, rot: p.rot });
+    if (this.placeType === 'spawn') this.removeByType('spawn'); // un seul point de spawn
+    this.spawn({ type: this.placeType, x: p.x, z: p.z, rot: p.rot, char: this.placeChar, y: p.y });
     this.notify();
   }
 
@@ -267,12 +280,38 @@ export class EditorEngine {
     hitX: number,
     hitZ: number,
     tool: ItemType,
-  ): { x: number; z: number; rot: number; valid: boolean } {
+  ): { x: number; z: number; rot: number; valid: boolean; y?: number } {
+    // switch / câble RJ45 : se posent au centre d'une table vide (relevés au plateau)
+    if (tool === 'switch' || tool === 'rj45') {
+      const table = this.tableUnder(hitX, hitZ);
+      if (table) {
+        const occupied = this.entries.some(
+          (e) =>
+            (e.item.type === 'switch' || e.item.type === 'rj45') &&
+            Math.abs(e.item.x - table.item.x) < 0.6 &&
+            Math.abs(e.item.z - table.item.z) < 0.6,
+        );
+        return { x: table.item.x, z: table.item.z, rot: this.placeRot, valid: !occupied, y: TABLE_TOP };
+      }
+    }
     const wall = this.snapToWall(hitX, hitZ, tool);
     if (wall) return { ...wall, valid: true };
     const x = snap(hitX);
     const z = snap(hitZ);
     return { x, z, rot: this.placeRot, valid: this.inBounds(x, z) };
+  }
+
+  /** Table/bureau prof (plateau vide) sous le curseur, sinon null. */
+  private tableUnder(x: number, z: number): Entry | null {
+    for (const e of this.entries) {
+      if (e.item.type !== 'table' && e.item.type !== 'teacher') continue;
+      const fp = itemFootprintSize(e.item.type);
+      const quarter = ((((Math.round(e.item.rot / (Math.PI / 2)) % 2) + 2) % 2) === 1);
+      const hw = (quarter ? fp.d : fp.w) / 2;
+      const hd = (quarter ? fp.w : fp.d) / 2;
+      if (Math.abs(x - e.item.x) <= hw && Math.abs(z - e.item.z) <= hd) return e;
+    }
+    return null;
   }
 
   /**
@@ -282,40 +321,22 @@ export class EditorEngine {
    * décalage de collage s'adapte automatiquement.
    */
   private snapToWall(hitX: number, hitZ: number, tool: ItemType): { x: number; z: number; rot: number } | null {
-    const HX = ROOM.halfX;
-    const HZ = ROOM.halfZ;
-    const FAR = HX + ADJACENT_DEPTH; // mur du fond de la salle voisine
     const fp = itemFootprintSize(tool);
     const hx = fp.w / 2;
     const hz = fp.d / 2;
 
-    interface Wall {
-      axis: 'x' | 'z';
-      p: number;
-      baseRot: number;
-      inward: number;
-      aMin: number;
-      aMax: number;
-    }
-    const walls: Wall[] = [
-      { axis: 'x', p: -HX, baseRot: -Math.PI / 2, inward: 1, aMin: -HZ, aMax: HZ }, // mur gauche
-      { axis: 'x', p: FAR, baseRot: Math.PI / 2, inward: -1, aMin: -HZ, aMax: HZ }, // fond salle voisine
-      {
-        axis: 'x', // mur de séparation : côté selon la position du curseur
-        p: HX,
-        baseRot: hitX < HX ? Math.PI / 2 : -Math.PI / 2,
-        inward: hitX < HX ? -1 : 1,
-        aMin: -HZ,
-        aMax: HZ,
-      },
-      { axis: 'z', p: -HZ, baseRot: Math.PI, inward: 1, aMin: -HX, aMax: FAR }, // mur avant
-      { axis: 'z', p: HZ, baseRot: 0, inward: -1, aMin: -HX, aMax: FAR }, // mur arrière
-    ];
-
-    let best: Wall | null = null;
-    let bestDist = 1.3;
+    // murs intérieurs de toutes les salles (issus du plan partagé)
+    const walls = snapWalls();
+    let best: SnapWall | null = null;
+    let bestDist = 1.1;
     for (const w of walls) {
-      const d = Math.abs((w.axis === 'x' ? hitX : hitZ) - w.p);
+      const along = w.axis === 'x' ? hitZ : hitX;
+      if (along < w.aMin || along > w.aMax) continue; // curseur hors de l'étendue du mur
+      const perp = w.axis === 'x' ? hitX : hitZ;
+      // le curseur doit être du côté intérieur du mur (dans la salle concernée) :
+      // sur un mur partagé (ex. couloir / salle), on aimante du côté où l'on est.
+      if (w.inward > 0 ? perp < w.p - 0.3 : perp > w.p + 0.3) continue;
+      const d = Math.abs(perp - w.p);
       if (d < bestDist) {
         bestDist = d;
         best = w;
@@ -328,11 +349,14 @@ export class EditorEngine {
     const wx = quarter ? hz : hx;
     const wz = quarter ? hx : hz;
     const clamp = THREE.MathUtils.clamp;
+    // dégagement pour que le dos de l'objet soit DEVANT la surface du mur (boîte
+    // de 0.08 rentrée de 0.04) et non dedans : évite le z-fighting au collage.
+    const CLEAR = 0.05;
 
     if (best.axis === 'x') {
-      return { x: best.p + best.inward * wx, z: clamp(snap(hitZ), best.aMin + wz, best.aMax - wz), rot };
+      return { x: best.p + best.inward * (wx + CLEAR), z: clamp(snap(hitZ), best.aMin + wz, best.aMax - wz), rot };
     }
-    return { x: clamp(snap(hitX), best.aMin + wx, best.aMax - wx), z: best.p + best.inward * wz, rot };
+    return { x: clamp(snap(hitX), best.aMin + wx, best.aMax - wx), z: best.p + best.inward * (wz + CLEAR), rot };
   }
 
   private key(e: KeyboardEvent): void {
@@ -348,8 +372,8 @@ export class EditorEngine {
       else if (e.key === 'ArrowDown') e0.item.z += SNAP;
       else if (e.key === 'ArrowLeft') e0.item.x -= SNAP;
       else if (e.key === 'ArrowRight') e0.item.x += SNAP;
-      e0.item.x = THREE.MathUtils.clamp(e0.item.x, -ROOM.halfX + 0.6, ROOM.halfX + ADJACENT_DEPTH - 0.6);
-      e0.item.z = THREE.MathUtils.clamp(e0.item.z, -ROOM.halfZ + 0.6, ROOM.halfZ - 0.6);
+      e0.item.x = THREE.MathUtils.clamp(e0.item.x, PLAN.minX + 0.6, PLAN.maxX - 0.6);
+      e0.item.z = THREE.MathUtils.clamp(e0.item.z, PLAN.minZ + 0.6, PLAN.maxZ - 0.6);
       e0.object.position.set(e0.item.x, 0, e0.item.z);
       this.boxHelper?.update();
       e.preventDefault();
@@ -397,9 +421,9 @@ export class EditorEngine {
 
   // --------------------------------------------------------------- ghost
 
-  private buildGhost(type: ItemType): void {
+  private buildGhost(type: ItemType, charId?: string): void {
     this.removeGhost();
-    const g = buildItem(type, 999);
+    const g = buildItem(type, 999, charId);
     g.traverse((o) => {
       const m = o as THREE.Mesh;
       const mats = Array.isArray(m.material) ? m.material : m.material ? [m.material] : [];
@@ -451,13 +475,8 @@ export class EditorEngine {
   }
 
   private inBounds(x: number, z: number): boolean {
-    // couvre la salle de classe ET la salle voisine
-    return (
-      x > -ROOM.halfX + 0.5 &&
-      x < ROOM.halfX + ADJACENT_DEPTH - 0.5 &&
-      z > -ROOM.halfZ + 0.5 &&
-      z < ROOM.halfZ - 0.5
-    );
+    // valide si le point est dans l'une des salles ou le couloir
+    return inAnyRoom(x, z);
   }
 
   private disposeObject(obj: THREE.Object3D): void {

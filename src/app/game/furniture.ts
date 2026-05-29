@@ -20,7 +20,10 @@ export type ItemType =
   | 'npc'
   | 'spawn'
   | 'plant'
-  | 'bin';
+  | 'bin'
+  | 'server'
+  | 'switch'
+  | 'rj45';
 
 export interface MapItem {
   type: ItemType;
@@ -28,6 +31,10 @@ export interface MapItem {
   z: number;
   /** rotation Y en radians */
   rot: number;
+  /** id du personnage à incarner (pour les objets « npc » uniquement) */
+  char?: string;
+  /** hauteur (ex. posé sur une table) ; au sol si absent */
+  y?: number;
 }
 
 export const ITEM_TYPES: ItemType[] = [
@@ -48,6 +55,9 @@ export const ITEM_TYPES: ItemType[] = [
   'spawn',
   'plant',
   'bin',
+  'server',
+  'switch',
+  'rj45',
 ];
 
 export const ITEM_LABELS: Record<ItemType, string> = {
@@ -68,6 +78,9 @@ export const ITEM_LABELS: Record<ItemType, string> = {
   spawn: 'Spawn joueur',
   plant: 'Plante',
   bin: 'Poubelle',
+  server: 'Serveur (noir)',
+  switch: 'Switch réseau',
+  rj45: 'Câble RJ45',
 };
 
 interface Footprint {
@@ -94,6 +107,9 @@ const FOOTPRINTS: Record<ItemType, Footprint> = {
   spawn: { hx: 0.4, hz: 0.4, h: 0.1 },
   plant: { hx: 0.3, hz: 0.3, h: 1.4 },
   bin: { hx: 0.2, hz: 0.2, h: 0.45 },
+  server: { hx: 0.35, hz: 0.4, h: 2.1 },
+  switch: { hx: 0.36, hz: 0.19, h: 0.26 },
+  rj45: { hx: 0.24, hz: 0.24, h: 0.2 },
 };
 
 function mat(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> = {}) {
@@ -101,7 +117,7 @@ function mat(color: number, opts: Partial<THREE.MeshStandardMaterialParameters> 
 }
 
 /** Construit un objet centré à l'origine (au sol y=0), face « avant » vers -z. */
-export function buildItem(type: ItemType, seed = 0): THREE.Group {
+export function buildItem(type: ItemType, seed = 0, charId?: string): THREE.Group {
   switch (type) {
     case 'table':
       return buildTable(2.0, 0.85);
@@ -131,7 +147,10 @@ export function buildItem(type: ItemType, seed = 0): THREE.Group {
       return buildLowCab();
     case 'npc': {
       const g = new THREE.Group();
-      g.add(buildCharacter(CHARACTERS[seed % CHARACTERS.length]));
+      const char =
+        (charId ? CHARACTERS.find((c) => c.id === charId) : undefined) ??
+        CHARACTERS[seed % CHARACTERS.length];
+      g.add(buildCharacter(char));
       return g;
     }
     case 'spawn':
@@ -140,6 +159,12 @@ export function buildItem(type: ItemType, seed = 0): THREE.Group {
       return buildPlant();
     case 'bin':
       return buildBin();
+    case 'server':
+      return buildServer();
+    case 'switch':
+      return buildSwitch();
+    case 'rj45':
+      return buildRj45();
   }
 }
 
@@ -300,8 +325,9 @@ function buildShelf(): THREE.Group {
   board.castShadow = true;
   g.add(board);
 
-  const rail = new THREE.Mesh(new THREE.BoxGeometry(w, 0.12, 0.04), greyDark);
-  rail.position.set(0, y, d / 2 - 0.02);
+  // rail un peu plus étroit et avancé : pas de face commune avec la planche (z-fighting)
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(w - 0.04, 0.12, 0.04), greyDark);
+  rail.position.set(0, y, d / 2 - 0.06);
   g.add(rail);
 
   for (const sx of [-w / 2 + 0.2, w / 2 - 0.2]) {
@@ -466,13 +492,13 @@ function buildCabinet(): THREE.Group {
   const doorMat = mat(0x6f7884, { metalness: 0.3 });
   for (const sx of [-w / 4, w / 4]) {
     const door = new THREE.Mesh(new THREE.BoxGeometry(w / 2 - 0.04, h - 0.12, 0.03), doorMat);
-    door.position.set(sx, h / 2, -d / 2 - 0.005);
+    door.position.set(sx, h / 2, -d / 2 - 0.03);
     g.add(door);
   }
   const handleMat = mat(0xcbd5e1, { metalness: 0.6 });
   for (const sx of [-0.05, 0.05]) {
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.32, 0.04), handleMat);
-    handle.position.set(sx, h / 2, -d / 2 - 0.04);
+    handle.position.set(sx, h / 2, -d / 2 - 0.08);
     g.add(handle);
   }
   return g;
@@ -496,10 +522,10 @@ function buildLowCab(): THREE.Group {
   const handleMat = mat(0x44484f, { metalness: 0.5 });
   for (const sx of [-w / 3, 0, w / 3]) {
     const door = new THREE.Mesh(new THREE.BoxGeometry(w / 3 - 0.05, h - 0.16, 0.03), doorMat);
-    door.position.set(sx, h / 2, -d / 2 - 0.005);
+    door.position.set(sx, h / 2, -d / 2 - 0.03);
     g.add(door);
     const handle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.04), handleMat);
-    handle.position.set(sx + 0.1, h / 2, -d / 2 - 0.04);
+    handle.position.set(sx + 0.1, h / 2, -d / 2 - 0.08);
     g.add(handle);
   }
   return g;
@@ -507,12 +533,13 @@ function buildLowCab(): THREE.Group {
 
 function buildPlant(): THREE.Group {
   const g = new THREE.Group();
-  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.2, 0.4, 10), mat(0xb5651d));
-  pot.position.set(0, 0.2, 0);
+  const pot = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.15, 0.38, 10), mat(0xb5651d));
+  pot.position.set(0, 0.19, 0);
   pot.castShadow = true;
   g.add(pot);
+  // feuillage compact : reste dans l'emprise (~0.3) pour ne pas traverser les murs
   const foliage = mat(0x2f7d32, { flatShading: true });
-  for (const [dx, dy, dz, r] of [[0, 0.7, 0, 0.42], [0.2, 1.0, 0.1, 0.3], [-0.2, 1.0, -0.1, 0.28], [0, 1.25, 0, 0.26]]) {
+  for (const [dx, dy, dz, r] of [[0, 0.6, 0, 0.28], [0.1, 0.84, 0.06, 0.2], [-0.1, 0.84, -0.06, 0.18], [0, 1.02, 0, 0.16]]) {
     const leaf = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), foliage);
     leaf.position.set(dx, dy, dz);
     leaf.castShadow = true;
@@ -551,6 +578,79 @@ function buildBin(): THREE.Group {
   bin.position.set(0, 0.22, 0);
   bin.castShadow = true;
   g.add(bin);
+  return g;
+}
+
+/** Baie serveur noire (face avant vers -z) : slots + LEDs vertes/ambre. */
+function buildServer(): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 2.1, 0.8), mat(0x121317, { metalness: 0.5, roughness: 0.4 }));
+  body.position.set(0, 1.05, 0);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  g.add(body);
+  const front = new THREE.Mesh(new THREE.BoxGeometry(0.62, 1.95, 0.02), mat(0x05060a));
+  front.position.set(0, 1.05, -0.41);
+  g.add(front);
+  const slot = mat(0x1c1f26);
+  const ledGreen = new THREE.MeshStandardMaterial({ color: 0x00ff88, emissive: 0x00ff88, emissiveIntensity: 2.4 });
+  const ledAmber = new THREE.MeshStandardMaterial({ color: 0xffb020, emissive: 0xffb020, emissiveIntensity: 2.2 });
+  for (let i = 0; i < 7; i++) {
+    const y = 0.32 + i * 0.26;
+    const unit = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.18, 0.03), slot);
+    unit.position.set(0, y, -0.42);
+    g.add(unit);
+    for (let k = 0; k < 2; k++) {
+      const led = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.02), (i + k) % 3 === 0 ? ledAmber : ledGreen);
+      led.position.set(-0.22 + k * 0.1, y, -0.45);
+      g.add(led);
+    }
+  }
+  return g;
+}
+
+/** Switch réseau (boîtier noir bas, ports RJ45 + LEDs lien en façade -z). */
+function buildSwitch(): THREE.Group {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.14, 0.36), mat(0x16181e, { metalness: 0.5, roughness: 0.4 }));
+  body.position.set(0, 0.12, 0);
+  body.castShadow = true;
+  g.add(body);
+  const portMat = mat(0x0a0b0f);
+  const link = new THREE.MeshStandardMaterial({ color: 0x34d399, emissive: 0x34d399, emissiveIntensity: 2 });
+  for (let i = 0; i < 8; i++) {
+    const x = -0.28 + i * 0.08;
+    const port = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.06, 0.02), portMat);
+    port.position.set(x, 0.11, -0.18);
+    g.add(port);
+    const led = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.02, 0.01), link);
+    led.position.set(x, 0.16, -0.18);
+    g.add(led);
+  }
+  return g;
+}
+
+/** Câble RJ45 enroulé (bobine bleue + connecteurs). */
+function buildRj45(): THREE.Group {
+  const g = new THREE.Group();
+  const cable = mat(0x2563eb, { roughness: 0.6 });
+  const coil1 = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.04, 8, 18), cable);
+  coil1.rotation.x = Math.PI / 2;
+  coil1.position.set(0, 0.06, 0);
+  coil1.castShadow = true;
+  g.add(coil1);
+  const coil2 = new THREE.Mesh(new THREE.TorusGeometry(0.13, 0.035, 8, 16), cable);
+  coil2.rotation.x = Math.PI / 2;
+  coil2.position.set(0.02, 0.13, 0.01);
+  g.add(coil2);
+  const conn = mat(0xcbd5e1, { metalness: 0.3, roughness: 0.5 });
+  const c1 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.12), conn);
+  c1.position.set(0.2, 0.05, 0.06);
+  g.add(c1);
+  const c2 = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.12), conn);
+  c2.position.set(-0.18, 0.05, -0.08);
+  c2.rotation.y = 0.6;
+  g.add(c2);
   return g;
 }
 
@@ -713,11 +813,147 @@ export const DEFAULT_LAYOUT: MapItem[] = [
   { type: 'cabinet', x: -10.75, z: 4.5, rot: -1.5707963267948966 },
   { type: 'cabinet', x: -10.75, z: 5.5, rot: -1.5707963267948966 },
   { type: 'bin', x: 11.2, z: 1.5, rot: -1.5707963267948966 },
+  // --- alternants supplémentaires ---
+  { type: 'npc', x: 8, z: 4.5, rot: 3.141592653589793, char: 'marius' },
+  { type: 'npc', x: -8, z: 5, rot: 3.141592653589793, char: 'jojo' },
+  { type: 'npc', x: 22.5, z: -4, rot: 4.71238898038469, char: 'weimin' },
+  { type: 'npc', x: 17.5, z: 6.18, rot: 3.141592653589793, char: 'nathan' },
+  { type: 'npc', x: 22.5, z: -5, rot: 4.71238898038469, char: 'jiji' },
+  // --- salle de classe (à gauche) ---
+  { type: 'board', x: -26.92, z: 0, rot: -1.5707963267948966 },
+  { type: 'table', x: -26.55, z: -4.5, rot: 1.5707963267948966 },
+  { type: 'table', x: -22.5, z: -5.5, rot: 4.71238898038469 },
+  { type: 'table', x: -22.5, z: -3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -20.5, z: -5.5, rot: 7.853981633974483 },
+  { type: 'table', x: -20.5, z: -3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -18.5, z: -5.5, rot: 7.853981633974483 },
+  { type: 'table', x: -18.5, z: -3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -16, z: -5.5, rot: 4.71238898038469 },
+  { type: 'table', x: -16, z: -3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -22.5, z: 0, rot: 4.71238898038469 },
+  { type: 'table', x: -20.5, z: 0, rot: 4.71238898038469 },
+  { type: 'table', x: -18.5, z: 0, rot: 4.71238898038469 },
+  { type: 'table', x: -16, z: 0, rot: 4.71238898038469 },
+  { type: 'table', x: -22.5, z: 5.5, rot: 4.71238898038469 },
+  { type: 'table', x: -22.5, z: 3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -20.5, z: 5.5, rot: 4.71238898038469 },
+  { type: 'table', x: -20.5, z: 3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -18.5, z: 5.5, rot: 4.71238898038469 },
+  { type: 'table', x: -18.5, z: 3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -16, z: 5.5, rot: 4.71238898038469 },
+  { type: 'table', x: -16, z: 3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -13, z: 5.5, rot: 4.71238898038469 },
+  { type: 'table', x: -13, z: 3.5, rot: 4.71238898038469 },
+  { type: 'table', x: -13, z: -4, rot: 4.71238898038469 },
+  { type: 'desk', x: -25, z: 5.5, rot: 4.71238898038469 },
+  { type: 'plant', x: -25, z: 4, rot: 4.71238898038469 },
+  { type: 'bin', x: -26.5, z: -6.3, rot: 7.853981633974483 },
+  { type: 'window', x: -12.05, z: 6.42, rot: 0 },
+  { type: 'window', x: -25.5, z: 6.42, rot: 0 },
+  { type: 'louvre', x: -15, z: 6.4, rot: 0 },
+  { type: 'louvre', x: -18, z: 6.4, rot: 0 },
+  { type: 'louvre', x: -21, z: 6.4, rot: 0 },
+  { type: 'door', x: -12.5, z: -6.4, rot: 3.141592653589793 },
+  { type: 'louvreTall', x: -14, z: -6.4, rot: 3.141592653589793 },
+  { type: 'louvreTall', x: -22.5, z: -6.4, rot: 3.141592653589793 },
+  { type: 'louvreTall', x: 32, z: -6.4, rot: 3.141592653589793 },
+  { type: 'chair', x: -22, z: 5.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -22, z: 3.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -20, z: 5.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -20, z: 3.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -18, z: 5.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -18, z: 4, rot: 1.5707963267948966 },
+  { type: 'chair', x: -15.5, z: 5.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -15.5, z: 3.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -12.5, z: 5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -12.5, z: 3.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -12.5, z: -4, rot: 1.5707963267948966 },
+  { type: 'chair', x: -15.5, z: 0, rot: 1.5707963267948966 },
+  { type: 'chair', x: -18, z: 0, rot: 1.5707963267948966 },
+  { type: 'chair', x: -20, z: 0, rot: 1.5707963267948966 },
+  { type: 'chair', x: -22, z: 0, rot: 1.5707963267948966 },
+  { type: 'chair', x: -22, z: -3.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -22, z: -5.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -20, z: -3.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -20, z: -5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -18, z: -5.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -18, z: -3.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -15.5, z: -3.5, rot: 1.5707963267948966 },
+  { type: 'chair', x: -15.5, z: -5.5, rot: 1.5707963267948966 },
+  { type: 'cabinet', x: -11.25, z: -1, rot: 1.5707963267948966 },
+  { type: 'cabinet', x: -11.25, z: 0, rot: 1.5707963267948966 },
+  // --- portes / louvres sur le mur avant (côté couloir) ---
+  { type: 'door', x: -12, z: -6.6, rot: 0 },
+  { type: 'door', x: -7.5, z: -6.6, rot: 0 },
+  { type: 'door', x: 13, z: -6.6, rot: 0 },
+  { type: 'door', x: 25, z: -6.6, rot: 0 },
+  { type: 'louvreTall', x: -6, z: -6.6, rot: 0 },
+  { type: 'louvreTall', x: 5.5, z: -6.6, rot: 0 },
+  { type: 'louvreTall', x: 15, z: -6.6, rot: 0 },
+  { type: 'louvreTall', x: 23, z: -6.6, rot: 0 },
+  { type: 'louvreTall', x: 32, z: -6.6, rot: 0 },
+  { type: 'louvreTall', x: -13.5, z: -6.6, rot: 0 },
+  { type: 'louvreTall', x: -22.5, z: -6.6, rot: 0 },
+  // --- couloir : mobilier le long du mur du fond (z = -10) ---
+  { type: 'plant', x: -26.5, z: -9.7, rot: 3.141592653589793 },
+  { type: 'plant', x: 32.5, z: -9.7, rot: 3.141592653589793 },
+  { type: 'cabinet', x: -18, z: -9.75, rot: 3.141592653589793 },
+  { type: 'cabinet', x: -5, z: -9.75, rot: 3.141592653589793 },
+  { type: 'cabinet', x: 8.5, z: -9.75, rot: 3.141592653589793 },
+  { type: 'cabinet', x: 19.5, z: -9.75, rot: 3.141592653589793 },
+  { type: 'cabinet', x: 28, z: -9.75, rot: 3.141592653589793 },
+  { type: 'bin', x: 18, z: -9.8, rot: 3.141592653589793 },
+  { type: 'bin', x: -3.5, z: -9.8, rot: 3.141592653589793 },
+  { type: 'bin', x: -19.5, z: -9.8, rot: 3.141592653589793 },
+  { type: 'chair', x: -20.5, z: -9.74, rot: 3.141592653589793 },
+  { type: 'chair', x: 17, z: -9.74, rot: 3.141592653589793 },
+  { type: 'chair', x: 29.5, z: -9.74, rot: 3.141592653589793 },
+  { type: 'plant', x: 18.5, z: -9.7, rot: 3.141592653589793 },
+  { type: 'plant', x: -4, z: -9.7, rot: 3.141592653589793 },
+  { type: 'plant', x: -19, z: -9.7, rot: 3.141592653589793 },
+  { type: 'lowcab', x: -22.5, z: -9.75, rot: 3.141592653589793 },
+  { type: 'lowcab', x: 6, z: -9.75, rot: 3.141592653589793 },
+  { type: 'lowcab', x: 25, z: -9.75, rot: 3.141592653589793 },
+  { type: 'window', x: 22.5, z: -9.92, rot: 3.141592653589793 },
+  { type: 'window', x: 13.5, z: -9.92, rot: 3.141592653589793 },
+  { type: 'window', x: 11.5, z: -9.92, rot: 3.141592653589793 },
+  { type: 'window', x: 2.5, z: -9.92, rot: 3.141592653589793 },
+  { type: 'window', x: 0.5, z: -9.92, rot: 3.141592653589793 },
+  { type: 'window', x: -9.5, z: -9.92, rot: 3.141592653589793 },
+  { type: 'window', x: -11.5, z: -9.92, rot: 3.141592653589793 },
+  { type: 'window', x: -24.5, z: -9.92, rot: 3.141592653589793 },
+  // --- salle serveur équipée ---
+  { type: 'server', x: 32.55, z: 4.5, rot: 1.5707963267948966 },
+  { type: 'server', x: 32.55, z: 3, rot: 1.5707963267948966 },
+  { type: 'server', x: 32.55, z: 1, rot: 1.5707963267948966 },
+  { type: 'table', x: 32, z: -0.5, rot: 0 },
+  { type: 'desk', x: 30, z: -0.5, rot: 0 },
+  { type: 'table', x: 27.5, z: 2.5, rot: -1.5707963267948966 },
+  { type: 'shelf', x: 27.3, z: 4, rot: -1.5707963267948966 },
+  { type: 'shelf', x: 27.3, z: 1, rot: -1.5707963267948966 },
+  { type: 'plant', x: 27.35, z: -5.5, rot: -1.5707963267948966 },
+  { type: 'cabinet', x: 32.7, z: -4.5, rot: 1.5707963267948966 },
+  { type: 'cabinet', x: 32.7, z: -3.5, rot: 1.5707963267948966 },
+  { type: 'lowcab', x: 32.7, z: -2, rot: 1.5707963267948966 },
+  { type: 'switch', x: 27.5, z: 2.5, rot: 4.71238898038469, y: 0.72 },
+  { type: 'switch', x: 32, z: -0.5, rot: 3.141592653589793, y: 0.72 },
+  { type: 'rj45', x: 27.29, z: 0.5, rot: 1.5707963267948966 },
+  { type: 'rj45', x: 31.5, z: -4, rot: 3.141592653589793 },
+  { type: 'rj45', x: 28.5, z: -5, rot: 3.141592653589793 },
+  { type: 'rj45', x: 32, z: 4.5, rot: 3.141592653589793 },
+  { type: 'rj45', x: 27.29, z: 4, rot: 1.5707963267948966 },
+  // --- switchs / câbles posés sur des tables (autres salles) ---
+  { type: 'rj45', x: 14, z: 3.5, rot: 3.141592653589793, y: 0.72 },
+  { type: 'rj45', x: 10.55, z: -2, rot: 3.141592653589793, y: 0.72 },
+  { type: 'rj45', x: -3.5, z: -5.5, rot: 3.141592653589793, y: 0.72 },
+  { type: 'rj45', x: 2, z: 0, rot: 3.141592653589793, y: 0.72 },
+  { type: 'switch', x: -1.5, z: -0.5, rot: 1.5707963267948966, y: 0.72 },
+  { type: 'switch', x: 10.55, z: -4, rot: 1.5707963267948966, y: 0.72 },
 ];
 
 // --------------------------------------------------------------- persistance
 
-const STORAGE_KEY = 'sioretro.map.v4';
+const STORAGE_KEY = 'sioretro.map.v6';
 
 export function loadLayout(): MapItem[] {
   try {

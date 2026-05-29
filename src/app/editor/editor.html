@@ -11,6 +11,14 @@
         </button>
       }
     </div>
+    <div class="subtitle">PNJ — Alternants</div>
+    <div class="palette">
+      @for (t of npcTools; track t.key) {
+        <button class="tool npc" [class.active]="tool() === t.key" (click)="setTool(t.key)">
+          <span class="swatch" [style.background]="t.color"></span>{{ t.label }}
+        </button>
+      }
+    </div>
     <div class="actions">
       <button class="act" (click)="rotate()">⟳ Pivoter (R)</button>
       <button class="act danger" [disabled]="!hasSelection()" (click)="remove()">🗑 Supprimer</button>

@@ -23,10 +23,12 @@ export class MenuComponent implements AfterViewInit, OnDestroy {
   readonly play = output<Character>();
   readonly edit = output<void>();
 
-  protected readonly characters = CHARACTERS;
-  protected readonly selectedId = signal(CHARACTERS[0].id);
+  // seuls les personnages jouables apparaissent dans la sélection (les PNJ
+  // « npcOnly » restent plaçables dans l'éditeur mais ne sont pas jouables)
+  protected readonly characters = CHARACTERS.filter((c) => !c.npcOnly);
+  protected readonly selectedId = signal(this.characters[0].id);
   protected readonly selected = computed(
-    () => CHARACTERS.find((c) => c.id === this.selectedId()) ?? CHARACTERS[0],
+    () => this.characters.find((c) => c.id === this.selectedId()) ?? this.characters[0],
   );
   protected readonly accent = computed(() => cssColor(this.selected().color));
   protected readonly statBars = computed(() => {

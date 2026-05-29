@@ -17,6 +17,8 @@ canvas {
   top: 14px;
   left: 14px;
   width: 220px;
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -26,6 +28,13 @@ canvas {
   border: 3px solid #3b3f52;
   box-shadow: 0 0 0 3px #000;
   padding: 14px;
+}
+/* barre de défilement discrète façon rétro */
+.toolbar::-webkit-scrollbar {
+  width: 8px;
+}
+.toolbar::-webkit-scrollbar-thumb {
+  background: #3b3f52;
 }
 
 .toolbar .title {
@@ -59,6 +68,25 @@ canvas {
   background: #0f3a52;
   border-color: #38bdf8;
   color: #bde8ff;
+}
+.tool.npc {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tool .swatch {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
+.subtitle {
+  font-size: 10px;
+  color: #fde68a;
+  letter-spacing: 1px;
+  text-align: center;
+  margin-top: 2px;
 }
 
 .actions {

@@ -3,7 +3,7 @@ import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockCont
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPixelatedPass } from 'three/examples/jsm/postprocessing/RenderPixelatedPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
-import type { Character } from '../characters';
+import { CHARACTERS, type Character } from '../characters';
 import { buildCharacter } from './character-model';
 import { buildClassroom, CEILING_LIGHTS, PLAYER_BOUNDS } from './classroom';
 import { loadLayout } from './furniture';
@@ -15,14 +15,29 @@ export interface Dialogue {
   color: number;
 }
 
+/** État du combat contre Joey transmis au HUD. */
+export interface CombatView {
+  name: string;
+  color: number;
+  enemyHp: number;
+  enemyMax: number;
+  playerHp: number;
+  playerMax: number;
+  log: string;
+}
+
 export interface EngineCallbacks {
   onObjective: (text: string) => void;
   onProgress: (talked: number, total: number) => void;
   onPrompt: (text: string | null) => void;
   onDialogue: (d: Dialogue | null) => void;
   onTime: (seconds: number) => void;
-  onWin: (seconds: number) => void;
+  onWin: (seconds: number, title: string, sub: string) => void;
   onLockChange: (locked: boolean) => void;
+  /** combat en cours (null = aucun) */
+  onCombat: (c: CombatView | null) => void;
+  /** la quête de sauvetage est active sur cette map */
+  onQuest: (active: boolean) => void;
 }
 
 interface Interactable {
@@ -32,7 +47,23 @@ interface Interactable {
   name: string;
   line: string;
   color: number;
+  /** id du personnage (pour repérer Yorann / Joey / Raphaël) */
+  char?: string;
 }
+
+// ids des personnages de la quête (les noms affichés sont Yorann / Joey / Raphaël)
+const HERO_ID = 'marius'; // Yorann
+const VILLAIN_ID = 'brutus'; // Joey
+const CAPTIVE_ID = 'raphael'; // Raphaël
+
+const QUEST_LINES = {
+  hero: 'Hé, toi ! Joey a encore enlevé Raphaël et l\'a planqué quelque part. '
+    + 'Retrouve-les, affronte Joey et libère Raphaël — je compte sur toi !',
+  villainTaunt: 'Ha ! Raphaël est à MOI. Personne ne viendra le chercher !',
+  villainDefeated: 'Aïe... j\'abandonne ! C\'est bon, reprends Raphaël... pour cette fois.',
+  captiveStuck: 'Au secours... Joey m\'a enfermé ! Bats-le d\'abord, je t\'en supplie...',
+  captiveFreed: 'Mon héros ! Tu as mis une raclée à Joey et tu m\'as libéré. Merci infiniment !',
+};
 
 const EYE_HEIGHT = 1.6;
 const PLAYER_RADIUS = 0.35;
@@ -49,11 +80,19 @@ export class GameEngine {
   private colliders: THREE.Box3[] = [];
   private interactables: Interactable[] = [];
 
-  private talked = new Set<string>();
   private total = 0;
   private dialogueOpen = false;
   private pendingWin = false;
   private activePrompt: string | null = null;
+
+  // --- quête de sauvetage (active si Yorann + Joey + Raphaël sont sur la map) ---
+  private questActive = false;
+  private hasQuest = false;
+  private joeyDefeated = false;
+  private raphaelFreed = false;
+  private combat: CombatView | null = null;
+  private winTitle = 'SOUTENANCE RÉUSSIE !';
+  private winSub = 'Toute la classe a assuré 🎓';
 
   private velocity = new THREE.Vector3();
   private keys = { fwd: false, back: false, left: false, right: false };
@@ -95,6 +134,10 @@ export class GameEngine {
     this.renderer.setPixelRatio(1);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    // La scène est statique (le joueur ne projette pas d'ombre, PNJ/meubles fixes) :
+    // on ne calcule la shadow map qu'UNE fois au lieu de chaque frame -> gros gain.
+    this.renderer.shadowMap.autoUpdate = false;
+    this.renderer.shadowMap.needsUpdate = true;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
 
@@ -129,32 +172,44 @@ export class GameEngine {
     this.scene.add(room.group);
     this.colliders = room.colliders;
 
-    this.scene.add(new THREE.AmbientLight(0x9aa0b4, 0.7));
-    this.scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x40434d, 0.5));
+    // ambiant/hémisphère renforcés pour compenser la réduction des point lights
+    this.scene.add(new THREE.AmbientLight(0x9aa0b4, 1.0));
+    this.scene.add(new THREE.HemisphereLight(0xeaf2ff, 0x40434d, 0.7));
     const sun = new THREE.DirectionalLight(0xfff1d0, 1.5);
-    sun.position.set(14, 12, 4);
-    sun.target.position.set(-2, 0, 0);
+    // même direction qu'avant, mais recentré et élargi pour couvrir tout le plan
+    // (salles + couloir + serveur) : sinon les murs ne projettent pas d'ombre au loin.
+    sun.position.set(24.5, 12, 2.25);
+    sun.target.position.set(8.5, 0, -1.75);
     sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.mapSize.set(4096, 4096);
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 45;
-    sun.shadow.camera.left = -14;
-    sun.shadow.camera.right = 14;
-    sun.shadow.camera.top = 12;
-    sun.shadow.camera.bottom = -12;
+    sun.shadow.camera.far = 85;
+    sun.shadow.camera.left = -45;
+    sun.shadow.camera.right = 45;
+    sun.shadow.camera.top = 25;
+    sun.shadow.camera.bottom = -30;
     sun.shadow.bias = -0.0004;
     this.scene.add(sun);
     this.scene.add(sun.target);
-    for (const p of CEILING_LIGHTS) {
-      const light = new THREE.PointLight(0xfff2d4, 0.5, 12, 2);
+    // 1 plafonnier sur 2 émet de la lumière (les autres restent des caissons
+    // émissifs) : moitié moins de point lights à évaluer par fragment.
+    CEILING_LIGHTS.forEach((p, i) => {
+      if (i % 2 !== 0) return;
+      const light = new THREE.PointLight(0xfff2d4, 0.6, 9, 2);
       light.position.copy(p);
       this.scene.add(light);
-    }
+    });
 
-    // PNJ : les alternants placés dans l'éditeur (objets « npc » de la map)
+    // PNJ : les alternants placés dans l'éditeur (objets « npc » de la map).
+    // Si l'ancre désigne un personnage précis (catégorie choisie dans l'éditeur),
+    // on l'incarne ; sinon on répartit les autres camarades par défaut.
     if (this.others.length > 0) {
+      let fallbackIdx = 0;
       room.npcSpawns.forEach((anchor, i) => {
-        const who = this.others[i % this.others.length];
+        const explicit = anchor.char ? CHARACTERS.find((c) => c.id === anchor.char) : undefined;
+        // ne pas se dédoubler : si l'ancre désigne le joueur lui-même, on l'ignore
+        if (explicit && explicit.id === this.character.id) return;
+        const who = explicit ?? this.others[fallbackIdx++ % this.others.length];
         const model = buildCharacter(who);
         model.position.copy(anchor.pos);
         model.rotation.y = anchor.rotY;
@@ -175,10 +230,16 @@ export class GameEngine {
           name: who.name,
           line: who.line,
           color: who.color,
+          char: who.id,
         });
       });
     }
     this.total = this.interactables.length;
+
+    // la quête démarre dès que Yorann est présent sur la map (il donne la mission)
+    const present = new Set(this.interactables.map((it) => it.char));
+    this.questActive = present.has(HERO_ID);
+    this.cb.onQuest(this.questActive);
 
     this.camera.position.copy(room.spawn);
     this.camera.position.y = EYE_HEIGHT;
@@ -192,17 +253,17 @@ export class GameEngine {
 
   // --------------------------------------------------------------- histoire
 
-  private get allTalked(): boolean {
-    return this.total > 0 && this.talked.size >= this.total;
-  }
-
   private updateObjective(): void {
-    this.cb.onProgress(this.talked.size, this.total);
-    this.cb.onObjective(
-      this.allTalked
-        ? 'Toute la classe est prête pour la soutenance ! 🎓'
-        : 'Parle à tous tes camarades de la classe.',
-    );
+    if (this.questActive) {
+      let text: string;
+      if (!this.hasQuest) text = 'Parle à Yorann — il a besoin de ton aide.';
+      else if (!this.joeyDefeated) text = '⚔️ Retrouve Joey, bats-le et libère Raphaël !';
+      else if (!this.raphaelFreed) text = '🔓 Joey est K.O. ! Va libérer Raphaël.';
+      else text = 'Raphaël est libre ! 🎉';
+      this.cb.onObjective(text);
+      return;
+    }
+    this.cb.onObjective('Explore librement la salle.');
   }
 
   private openDialogue(d: Dialogue): void {
@@ -220,6 +281,11 @@ export class GameEngine {
 
   private onInteract(): void {
     if (!this.playing || this.won) return;
+    // pendant un combat, [E] = attaquer
+    if (this.combat) {
+      this.attack();
+      return;
+    }
     if (this.dialogueOpen) {
       this.closeDialogue();
       if (this.pendingWin) this.win();
@@ -227,12 +293,96 @@ export class GameEngine {
     }
     const it = this.activeInteractable();
     if (!it) return;
-    this.openDialogue({ name: it.name, line: it.line, color: it.color });
-    if (!this.talked.has(it.id)) {
-      this.talked.add(it.id);
-      this.updateObjective();
-      if (this.allTalked) this.pendingWin = true;
+    this.handleTalk(it);
+  }
+
+  /** Gère une interaction selon le personnage et l'avancement de la quête. */
+  private handleTalk(it: Interactable): void {
+    if (this.questActive) {
+      if (it.char === HERO_ID) {
+        this.hasQuest = true;
+        this.openDialogue({ name: it.name, line: QUEST_LINES.hero, color: it.color });
+        this.updateObjective();
+        return;
+      }
+      if (it.char === VILLAIN_ID) {
+        if (this.joeyDefeated) {
+          this.openDialogue({ name: it.name, line: QUEST_LINES.villainDefeated, color: it.color });
+        } else if (!this.hasQuest) {
+          this.openDialogue({ name: it.name, line: QUEST_LINES.villainTaunt, color: it.color });
+        } else {
+          this.startCombat(it);
+        }
+        return;
+      }
+      if (it.char === CAPTIVE_ID) {
+        if (!this.joeyDefeated) {
+          this.openDialogue({ name: it.name, line: QUEST_LINES.captiveStuck, color: it.color });
+        } else {
+          this.raphaelFreed = true;
+          this.openDialogue({ name: it.name, line: QUEST_LINES.captiveFreed, color: it.color });
+          this.updateObjective();
+          this.winTitle = 'RAPHAËL EST LIBÉRÉ !';
+          this.winSub = 'Tu as vaincu Joey et sauvé Raphaël 🦸';
+          this.pendingWin = true; // la victoire se déclenche à la fermeture du dialogue
+        }
+        return;
+      }
     }
+    // PNJ ordinaire : simple discussion (sans objectif)
+    this.openDialogue({ name: it.name, line: it.line, color: it.color });
+  }
+
+  // --------------------------------------------------------------- combat
+
+  private startCombat(it: Interactable): void {
+    this.combat = {
+      name: it.name,
+      color: it.color,
+      enemyHp: 100,
+      enemyMax: 100,
+      playerHp: 100,
+      playerMax: 100,
+      log: `Joey te barre la route ! Martèle [E] pour l'attaquer.`,
+    };
+    this.cb.onPrompt(null);
+    this.cb.onCombat({ ...this.combat });
+  }
+
+  private attack(): void {
+    const c = this.combat;
+    if (!c) return;
+    const dmg = 16 + Math.floor(Math.random() * 14); // 16-29
+    c.enemyHp = Math.max(0, c.enemyHp - dmg);
+    if (c.enemyHp === 0) {
+      c.log = `Coup décisif ! Joey est K.O. (-${dmg})`;
+      this.cb.onCombat({ ...c });
+      this.endCombat();
+      return;
+    }
+    // riposte de Joey (le joueur ne peut pas vraiment perdre : K.O. = on recommence)
+    const back = 6 + Math.floor(Math.random() * 10); // 6-15
+    c.playerHp = Math.max(0, c.playerHp - back);
+    if (c.playerHp === 0) {
+      c.playerHp = c.playerMax;
+      c.enemyHp = c.enemyMax;
+      c.log = `Joey t'a mis à terre ! Tu te relèves... le combat reprend.`;
+    } else {
+      c.log = `Tu frappes Joey (-${dmg}) · il riposte (-${back})`;
+    }
+    this.cb.onCombat({ ...c });
+  }
+
+  private endCombat(): void {
+    this.joeyDefeated = true;
+    this.combat = null;
+    this.cb.onCombat(null);
+    this.openDialogue({
+      name: 'Joey',
+      line: QUEST_LINES.villainDefeated,
+      color: 0x4b5563,
+    });
+    this.updateObjective();
   }
 
   private activeInteractable(): Interactable | null {
@@ -260,18 +410,30 @@ export class GameEngine {
 
   private updatePrompt(): void {
     const it = this.activeInteractable();
-    const text = it ? `[E] ${this.talked.has(it.id) ? 'Reparler à' : 'Parler à'} ${it.name}` : null;
+    const text = it ? this.promptFor(it) : null;
     if (text !== this.activePrompt) {
       this.activePrompt = text;
       this.cb.onPrompt(text);
     }
   }
 
+  private promptFor(it: Interactable): string {
+    if (this.questActive) {
+      if (it.char === VILLAIN_ID && this.hasQuest && !this.joeyDefeated) {
+        return '[E] ⚔️ Affronter Joey';
+      }
+      if (it.char === CAPTIVE_ID && this.joeyDefeated && !this.raphaelFreed) {
+        return '[E] 🔓 Libérer Raphaël';
+      }
+    }
+    return `[E] Parler à ${it.name}`;
+  }
+
   private win(): void {
     this.won = true;
     this.closeDialogue();
     this.controls.unlock();
-    this.cb.onWin(Math.floor(this.elapsed));
+    this.cb.onWin(Math.floor(this.elapsed), this.winTitle, this.winSub);
   }
 
   // --------------------------------------------------------------- entrées
@@ -317,7 +479,7 @@ export class GameEngine {
         this.lastWholeSecond = whole;
         this.cb.onTime(whole);
       }
-      if (!this.dialogueOpen) {
+      if (!this.dialogueOpen && !this.combat) {
         this.updateMovement(dt);
         this.updatePrompt();
       }
@@ -345,41 +507,41 @@ export class GameEngine {
     this.velocity.z += (wish.z - this.velocity.z) * t;
 
     const pos = this.camera.position;
+    // Déplacement et résolution AXE PAR AXE : on bouge en X puis on corrige en X,
+    // puis en Z puis on corrige en Z. Évite l'éjection « à travers » un mur
+    // (téléportation) qui survenait avec la résolution par plus faible pénétration
+    // aux coins et jonctions de murs.
     pos.x += this.velocity.x * dt;
+    this.resolveAxis(pos, 'x');
     pos.z += this.velocity.z * dt;
-
-    this.resolveCollisions(pos);
+    this.resolveAxis(pos, 'z');
     pos.x = THREE.MathUtils.clamp(pos.x, PLAYER_BOUNDS.minX, PLAYER_BOUNDS.maxX);
     pos.z = THREE.MathUtils.clamp(pos.z, PLAYER_BOUNDS.minZ, PLAYER_BOUNDS.maxZ);
     pos.y = EYE_HEIGHT;
   }
 
-  private resolveCollisions(pos: THREE.Vector3): void {
+  /** Recule le joueur hors de chaque collider, uniquement sur l'axe donné,
+   *  du côté d'où il arrive (selon le signe de sa vitesse). */
+  private resolveAxis(pos: THREE.Vector3, axis: 'x' | 'z'): void {
     const r = PLAYER_RADIUS;
     for (const box of this.colliders) {
       const minX = box.min.x - r;
       const maxX = box.max.x + r;
       const minZ = box.min.z - r;
       const maxZ = box.max.z + r;
-      if (pos.x > minX && pos.x < maxX && pos.z > minZ && pos.z < maxZ) {
-        const dxL = pos.x - minX;
-        const dxR = maxX - pos.x;
-        const dzD = pos.z - minZ;
-        const dzU = maxZ - pos.z;
-        const min = Math.min(dxL, dxR, dzD, dzU);
-        if (min === dxL) {
-          pos.x = minX;
-          this.velocity.x = Math.min(0, this.velocity.x);
-        } else if (min === dxR) {
-          pos.x = maxX;
-          this.velocity.x = Math.max(0, this.velocity.x);
-        } else if (min === dzD) {
-          pos.z = minZ;
-          this.velocity.z = Math.min(0, this.velocity.z);
-        } else {
-          pos.z = maxZ;
-          this.velocity.z = Math.max(0, this.velocity.z);
-        }
+      if (pos.x <= minX || pos.x >= maxX || pos.z <= minZ || pos.z >= maxZ) continue;
+      if (axis === 'x') {
+        const v = this.velocity.x;
+        if (v > 0) pos.x = minX;
+        else if (v < 0) pos.x = maxX;
+        else pos.x = pos.x - minX < maxX - pos.x ? minX : maxX;
+        this.velocity.x = 0;
+      } else {
+        const v = this.velocity.z;
+        if (v > 0) pos.z = minZ;
+        else if (v < 0) pos.z = maxZ;
+        else pos.z = pos.z - minZ < maxZ - pos.z ? minZ : maxZ;
+        this.velocity.z = 0;
       }
     }
   }

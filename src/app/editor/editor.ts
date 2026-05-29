@@ -10,10 +10,12 @@ import {
 } from '@angular/core';
 import { EditorEngine, Tool } from '../game/editor-engine';
 import { ITEM_LABELS, ITEM_TYPES } from '../game/furniture';
+import { CHARACTERS, cssColor } from '../characters';
 
 interface ToolButton {
   key: Tool;
   label: string;
+  color?: string;
 }
 
 @Component({
@@ -36,8 +38,16 @@ export class EditorComponent implements AfterViewInit, OnDestroy {
 
   protected readonly tools: ToolButton[] = [
     { key: 'select', label: 'Sélection' },
-    ...ITEM_TYPES.map((t) => ({ key: t, label: ITEM_LABELS[t] })),
+    // tous les objets sauf le PNJ générique : chaque alternant a sa propre catégorie
+    ...ITEM_TYPES.filter((t) => t !== 'npc').map((t) => ({ key: t, label: ITEM_LABELS[t] })),
   ];
+
+  /** Une catégorie par alternant : place exactement ce personnage en PNJ. */
+  protected readonly npcTools: ToolButton[] = CHARACTERS.map((c) => ({
+    key: `npc:${c.id}` as Tool,
+    label: c.name,
+    color: cssColor(c.color),
+  }));
 
   ngAfterViewInit(): void {
     this.engine = new EditorEngine(this.canvasRef().nativeElement, {
