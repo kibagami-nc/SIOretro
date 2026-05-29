@@ -1,0 +1,93 @@
+<div class="home" [class.in-settings]="mode() === 'settings'">
+  <!-- ciel étoilé pixelisé qui défile -->
+  <div class="stars" aria-hidden="true">
+    @for (s of etoiles; track $index) {
+      <i
+        [class.gold]="s.kind === 'gold'"
+        [class.pink]="s.kind === 'pink'"
+        [style.top.%]="s.top"
+        [style.left.%]="s.left"
+        [style.animation-duration.s]="s.dur"
+        [style.animation-delay.s]="s.delay"
+      ></i>
+    }
+  </div>
+  <div class="grid-floor" aria-hidden="true"></div>
+  <div class="crt" aria-hidden="true"></div>
+
+  <!-- écran titre -->
+  <main class="title-screen">
+    <div class="logo">
+      <span class="logo-top">LYCÉE DICK UKEIWË</span>
+      <h1 class="logo-main">
+        <span class="word w1">SIO</span>
+        <span class="word w2">RETRO</span>
+      </h1>
+      <span class="logo-sub">~ LA QUÊTE DU BTS ~</span>
+    </div>
+
+    <nav class="menu" role="menu">
+      @for (it of items; track it.id; let i = $index) {
+        <button
+          class="mitem"
+          role="menuitem"
+          [class.on]="i === sel()"
+          (mouseenter)="hover(i)"
+          (click)="choose(it)"
+        >
+          <span class="cursor">►</span>
+          <span class="mlabel">{{ it.label }}</span>
+        </button>
+      }
+    </nav>
+
+    <p class="press">▲▼ POUR CHOISIR &nbsp;·&nbsp; ENTRÉE POUR VALIDER</p>
+    <p class="copy">© 2026 — INSÉREZ UNE PIÈCE</p>
+  </main>
+
+  <!-- panneau réglages des touches -->
+  @if (mode() === 'settings') {
+    <div class="settings" role="dialog" aria-label="Réglages des touches">
+      <div class="panel">
+        <h2 class="ptitle">RÉGLAGES — TOUCHES</h2>
+
+        <ul class="binds">
+          @for (row of bindingRows; track row.action) {
+            <li class="brow">
+              <span class="bname">{{ row.label }}</span>
+              <button
+                class="bkey"
+                [class.capturing]="capturing() === row.action"
+                (click)="startCapture(row.action)"
+              >
+                @if (capturing() === row.action) {
+                  <span class="wait">APPUYEZ…</span>
+                } @else {
+                  {{ keyOf(row.action) }}
+                }
+              </button>
+            </li>
+          }
+          <li class="brow fixed">
+            <span class="bname">Viser</span>
+            <span class="bkey static">SOURIS</span>
+          </li>
+          <li class="brow fixed">
+            <span class="bname">Pause</span>
+            <span class="bkey static">ÉCHAP</span>
+          </li>
+        </ul>
+
+        <p class="hint">
+          Cliquez une touche puis appuyez sur la nouvelle.
+          <kbd>ÉCHAP</kbd> annule la capture.
+        </p>
+
+        <div class="pactions">
+          <button class="pbtn reset" (click)="resetKeys()">⟲ DÉFAUT</button>
+          <button class="pbtn back" (click)="closeSettings()">◄ RETOUR</button>
+        </div>
+      </div>
+    </div>
+  }
+</div>

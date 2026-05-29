@@ -1,5 +1,14 @@
 export type Filiere = 'SLAM' | 'SISR';
 
+/**
+ * Pouvoir actif d'un personnage jouable (touche MAJ en jeu) :
+ * - dash   : ruée vers l'avant instantanée (recharge courte)
+ * - sprint : course accélérée tant que la touche est maintenue (jauge d'énergie)
+ * - blink  : téléportation courte vers l'avant (recharge)
+ * - shield : bouclier d'invulnérabilité de quelques secondes (recharge)
+ */
+export type PowerKind = 'dash' | 'sprint' | 'blink' | 'shield';
+
 export interface Stats {
   code: number;
   reseau: number;
@@ -23,6 +32,8 @@ export interface Character {
   powerName: string;
   /** Description du pouvoir */
   powerDesc: string;
+  /** Pouvoir actif jouable (touche MAJ). Absent = dash par défaut. */
+  power?: PowerKind;
   /** Stats 0-100 pour les barres du menu */
   stats: Stats;
   /** Teint de peau explicite (sinon dérivé de l'id) */
@@ -41,9 +52,10 @@ export const CHARACTERS: Character[] = [
     color: 0x3b82f6,
     accent: 0x1e3a8a,
     role: 'Développeur SLAM — code plus vite que son ombre.',
-    line: 'Mon appli compile enfin... 3 minutes avant la soutenance. On y va !',
+    line: 'Mon appli compile enfin... pile avant le rendu du projet. On y va !',
     powerName: 'Compilation Express',
-    powerDesc: 'Pousse du code fonctionnel en un temps record, zéro erreur au build.',
+    powerDesc: 'Ruée éclair vers l\'avant — compile et fonce (MAJ).',
+    power: 'dash',
     stats: { code: 95, reseau: 40, secu: 50, vitesse: 85 },
   },
   {
@@ -54,8 +66,9 @@ export const CHARACTERS: Character[] = [
     accent: 0x0f766e,
     role: 'Développeur SLAM — architecte du back-end.',
     line: 'J\'ai poussé le back sur le serveur cette nuit. Tout est prêt, promis.',
-    powerName: 'Architecte Back-End',
-    powerDesc: 'Conçoit des API robustes qui ne tombent jamais en prod.',
+    powerName: 'Déploiement Instantané',
+    powerDesc: 'Se téléporte d\'un bond vers l\'avant, comme un déploiement (MAJ).',
+    power: 'blink',
     stats: { code: 90, reseau: 45, secu: 65, vitesse: 70 },
   },
   {
@@ -66,8 +79,9 @@ export const CHARACTERS: Character[] = [
     accent: 0x991b1b,
     role: 'Admin SISR — maître des réseaux.',
     line: 'Le réseau de l\'amphi est nickel, j\'ai vérifié tous les switchs.',
-    powerName: 'Maître des Réseaux',
-    powerDesc: 'Voit tout le trafic et optimise chaque paquet à la volée.',
+    powerName: 'Débit Maximal',
+    powerDesc: 'Course accélérée tant que MAJ est maintenue (jauge d\'énergie).',
+    power: 'sprint',
     stats: { code: 40, reseau: 95, secu: 80, vitesse: 70 },
   },
   {
@@ -78,8 +92,9 @@ export const CHARACTERS: Character[] = [
     accent: 0x166534,
     role: 'Admin SISR — dompteur de serveurs.',
     line: 'Les VM tournent. Si ça plante pendant ta démo, c\'est pas moi !',
-    powerName: 'Dompteur de Serveurs',
-    powerDesc: 'Garde les serveurs en ligne quoi qu\'il arrive, 99,9% uptime.',
+    powerName: 'Uptime 99,9 %',
+    powerDesc: 'Bouclier d\'invulnérabilité quelques secondes (MAJ).',
+    power: 'shield',
     stats: { code: 45, reseau: 85, secu: 75, vitesse: 65 },
   },
   {
@@ -91,7 +106,8 @@ export const CHARACTERS: Character[] = [
     role: 'Admin SISR — gardien du firewall.',
     line: 'J\'ai ouvert le bon port sur le firewall pour le diapo en ligne.',
     powerName: 'Bouclier Firewall',
-    powerDesc: 'Bloque toute intrusion avant même qu\'elle n\'atteigne le réseau.',
+    powerDesc: 'Érige un pare-feu : invulnérable quelques secondes (MAJ).',
+    power: 'shield',
     stats: { code: 35, reseau: 80, secu: 95, vitesse: 60 },
   },
   {
@@ -103,7 +119,8 @@ export const CHARACTERS: Character[] = [
     role: 'Admin SISR — roi du câble RJ45.',
     line: 'J\'ai re-serti douze câbles RJ45 ce matin. DOUZE ! On est parés.',
     powerName: 'Roi du RJ45',
-    powerDesc: 'Sertit et câble à la vitesse de l\'éclair, jamais un faux contact.',
+    powerDesc: 'Sprint éclair tant que MAJ est maintenue (jauge d\'énergie).',
+    power: 'sprint',
     stats: { code: 30, reseau: 90, secu: 70, vitesse: 90 },
   },
   {
@@ -115,7 +132,8 @@ export const CHARACTERS: Character[] = [
     role: 'Admin SISR — reine de la virtualisation.',
     line: 'J\'ai cloné l\'environnement, tu peux faire ta démo sans stresser.',
     powerName: 'Reine de la Virtu',
-    powerDesc: 'Clone et déploie des machines virtuelles en un clin d\'œil.',
+    powerDesc: 'Se clone plus loin : téléportation vers l\'avant (MAJ).',
+    power: 'blink',
     stats: { code: 55, reseau: 88, secu: 78, vitesse: 75 },
   },
   {
@@ -127,7 +145,8 @@ export const CHARACTERS: Character[] = [
     role: 'Admin SISR — as du dépannage.',
     line: 'Un souci ? Je débugue en deux minutes. Allez, direction l\'amphi !',
     powerName: 'Debug Instantané',
-    powerDesc: 'Diagnostique et répare n\'importe quelle panne en deux minutes.',
+    powerDesc: 'Ruée vers l\'avant ultra-rapide pour corriger à la volée (MAJ).',
+    power: 'dash',
     stats: { code: 60, reseau: 82, secu: 80, vitesse: 95 },
   },
   // --- trio « rivalité » (façon Mario / Bowser / Peach) ---
@@ -253,23 +272,7 @@ export const CHARACTERS: Character[] = [
   },
   // --- classe BTS SIO (PNJ uniquement) ---
   {
-    id: 'emmanuelle-vagner', name: 'Emmanuelle VAGNER', filiere: 'SLAM',
-    color: 0x9333ea, accent: 0x581c87, npcOnly: true,
-    role: 'Développeuse SLAM — créatrice d\'UI.',
-    line: 'J\'ai refait la maquette, c\'est beau ET ergonomique.',
-    powerName: 'Design Express', powerDesc: 'Transforme une interface terne en chef-d\'œuvre clair.',
-    stats: { code: 84, reseau: 44, secu: 52, vitesse: 86 },
-  },
-  {
-    id: 'araceli-ceron', name: 'Araceli CERON CAYUELA', filiere: 'SISR',
-    color: 0xf59e0b, accent: 0x92400e, skin: 0xe0ac8b, npcOnly: true,
-    role: 'Admin SISR — polyglotte des serveurs.',
-    line: 'Les sauvegardes tournent toutes les nuits, sin problema.',
-    powerName: 'Backup Total', powerDesc: 'Sauvegarde et restaure n\'importe quel système sans perte.',
-    stats: { code: 46, reseau: 88, secu: 86, vitesse: 66 },
-  },
-  {
-    id: 'sherryl-tauraatua', name: 'Sherryl TAURAATUA', filiere: 'SLAM',
+    id: 'sherryl-tauraatua', name: 'Sherryl', filiere: 'SLAM',
     color: 0xec4899, accent: 0x9d174d, skin: 0xc68642, npcOnly: true,
     role: 'Développeuse SLAM — fan de mobile.',
     line: 'L\'appli tourne nickel sur mon téléphone, regarde !',
@@ -277,7 +280,7 @@ export const CHARACTERS: Character[] = [
     stats: { code: 86, reseau: 48, secu: 54, vitesse: 84 },
   },
   {
-    id: 'wasso-wahuzue', name: 'Wasso WAHUZUE', filiere: 'SISR',
+    id: 'wasso-wahuzue', name: 'Wasso', filiere: 'SISR',
     color: 0xea580c, accent: 0x7c2d12, skin: 0x6b4226, npcOnly: true,
     role: 'Admin SISR — maître du câblage.',
     line: 'La baie est rangée au cordeau, chaque câble étiqueté.',
@@ -285,15 +288,7 @@ export const CHARACTERS: Character[] = [
     stats: { code: 40, reseau: 92, secu: 78, vitesse: 72 },
   },
   {
-    id: 'josias-wassaumi', name: 'Josias WASSAUMI', filiere: 'SLAM',
-    color: 0x0d9488, accent: 0x134e4a, skin: 0x6b4226, npcOnly: true,
-    role: 'Développeur SLAM — architecte logiciel.',
-    line: 'Mon code est modulaire, tu peux tout réutiliser.',
-    powerName: 'Architecture Solide', powerDesc: 'Conçoit des structures de code propres et évolutives.',
-    stats: { code: 89, reseau: 50, secu: 62, vitesse: 70 },
-  },
-  {
-    id: 'jean-robert-henaff', name: 'Jean ROBERT-HENAFF', filiere: 'SISR',
+    id: 'jean-robert-henaff', name: 'Jean', filiere: 'SISR',
     color: 0x64748b, accent: 0x1e293b, npcOnly: true,
     role: 'Admin SISR — gardien de la sécurité.',
     line: 'Mots de passe forts, pare-feu à jour : on est blindés.',
@@ -301,7 +296,7 @@ export const CHARACTERS: Character[] = [
     stats: { code: 44, reseau: 84, secu: 94, vitesse: 64 },
   },
   {
-    id: 'tyron-hanui', name: 'Tyron HANUI', filiere: 'SLAM',
+    id: 'tyron-hanui', name: 'Tyron', filiere: 'SLAM',
     color: 0xca8a04, accent: 0x713f12, skin: 0x8d5524, npcOnly: true,
     role: 'Développeur SLAM — rapide comme l\'éclair.',
     line: 'J\'ai fini ma fonctionnalité, je passe à la suivante.',
@@ -309,7 +304,7 @@ export const CHARACTERS: Character[] = [
     stats: { code: 85, reseau: 46, secu: 50, vitesse: 92 },
   },
   {
-    id: 'malaury-mounien', name: 'Malaury MOUNIEN', filiere: 'SISR',
+    id: 'malaury-mounien', name: 'Malaury', filiere: 'SISR',
     color: 0xa855f7, accent: 0x6b21a8, skin: 0x8d5524, npcOnly: true,
     role: 'Admin SISR — as du dépannage.',
     line: 'Un poste qui rame ? Je le remets d\'aplomb en deux minutes.',
@@ -317,7 +312,7 @@ export const CHARACTERS: Character[] = [
     stats: { code: 47, reseau: 85, secu: 80, vitesse: 88 },
   },
   {
-    id: 'urielle-zimmerlin', name: 'Urielle ZIMMERLIN', filiere: 'SLAM',
+    id: 'urielle-zimmerlin', name: 'Urielle', filiere: 'SLAM',
     color: 0xe11d48, accent: 0x881337, npcOnly: true,
     role: 'Développeuse SLAM — experte base de données.',
     line: 'Ma requête SQL sort le résultat avant que tu aies cliqué.',
@@ -325,7 +320,7 @@ export const CHARACTERS: Character[] = [
     stats: { code: 87, reseau: 52, secu: 66, vitesse: 78 },
   },
   {
-    id: 'loimata-tokava', name: 'Loimata TOKAVA', filiere: 'SLAM',
+    id: 'loimata-tokava', name: 'Loimata', filiere: 'SLAM',
     color: 0xf97316, accent: 0x9a3412, skin: 0x6b4226, npcOnly: true,
     role: 'Développeur SLAM — esprit d\'équipe.',
     line: 'On code mieux à plusieurs — viens, on s\'entraide !',

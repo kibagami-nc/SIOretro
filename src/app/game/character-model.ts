@@ -101,8 +101,10 @@ export function buildCharacter(char: Character): THREE.Group {
     const arm = box(armW, 0.62, armD, char.color);
     arm.position.set(sx, torsoY + 0.02, 0);
     g.add(arm);
-    const hand = box(armW, 0.16, armD, skin);
-    hand.position.set(sx, torsoY - 0.36, 0.02);
+    // main légèrement plus fine que la manche : elle se loge à l'intérieur du
+    // bras sans qu'aucune face ne soit coplanaire → plus de z-fighting sur le côté
+    const hand = box(armW - 0.04, 0.16, armD - 0.04, skin);
+    hand.position.set(sx, torsoY - 0.34, 0);
     g.add(hand);
   }
 

@@ -30,6 +30,46 @@ canvas {
   pointer-events: none;
 }
 
+/* réserve de beignets à côté du viseur */
+.ammo-cursor {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(18px, 6px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--pixel-font);
+  font-size: 14px;
+  color: #fde68a;
+  text-shadow: 2px 2px 0 #000;
+  pointer-events: none;
+  z-index: 9;
+}
+.ammo-cursor .dlogo {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  /* anneau rose façon beignet avec trou central */
+  background: radial-gradient(circle, #3a241a 0 30%, #f472b6 30% 72%, #db2777 72% 100%);
+  box-shadow: 0 0 0 1.5px #000, 2px 2px 0 rgba(0, 0, 0, 0.5);
+}
+.ammo-cursor .dcount {
+  letter-spacing: 1px;
+}
+
+.hud-left,
+.hud-center,
+.hud-right {
+  animation: hudIn 0.5s ease both;
+}
+.hud-center {
+  animation-delay: 0.08s;
+}
+.hud-right {
+  animation-delay: 0.16s;
+}
+
 .hud {
   position: absolute;
   inset: 0;
@@ -66,9 +106,14 @@ canvas {
 }
 
 .hud-center {
-  flex: 1;
+  position: absolute;
+  top: 14px;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: fit-content;
+  max-width: 70vw;
   text-align: center;
-  margin: 0 12px;
 }
 .hud-center .zone {
   font-size: 13px;
@@ -92,6 +137,139 @@ canvas {
   padding: 5px 9px;
 }
 
+.fps {
+  position: absolute;
+  right: 10px;
+  bottom: 8px;
+  font-family: var(--pixel-font);
+  font-size: 11px;
+  color: #4ade80;
+  background: rgba(8, 10, 20, 0.7);
+  border: 2px solid rgba(74, 222, 128, 0.5);
+  padding: 3px 7px;
+  text-shadow: 2px 2px 0 #000;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* pouvoir spécial (bas gauche) */
+.power-hud {
+  --pc: #38bdf8;
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  font-family: var(--pixel-font);
+  background: rgba(8, 10, 20, 0.74);
+  border: 2px solid rgba(255, 255, 255, 0.22);
+  box-shadow: 0 0 0 3px #000;
+  padding: 7px 9px;
+  color: #f1f5f9;
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0.6;
+  transition: opacity 0.15s steps(2), border-color 0.15s steps(2);
+}
+.power-hud.ready {
+  opacity: 1;
+  border-color: var(--pc);
+  box-shadow: 0 0 0 3px #000, 0 0 12px color-mix(in srgb, var(--pc) 55%, transparent);
+}
+.power-hud.active {
+  opacity: 1;
+  border-color: var(--pc);
+  animation: powerPulse 0.7s steps(2, start) infinite;
+}
+@keyframes powerPulse {
+  50% {
+    box-shadow: 0 0 0 3px #000, 0 0 20px var(--pc);
+  }
+}
+.power-hud .pk-key {
+  display: grid;
+  place-items: center;
+  min-width: 30px;
+  padding: 0 6px;
+  font-size: 11px;
+  color: #0b0e16;
+  background: var(--pc);
+  align-self: center;
+}
+.power-hud .pk-body {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  justify-content: center;
+}
+.power-hud .pk-name {
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-shadow: 2px 2px 0 #000;
+}
+.power-hud .pk-name b {
+  color: var(--pc);
+}
+.power-hud .pk-bar {
+  display: block;
+  width: 96px;
+  height: 8px;
+  background: #23262e;
+  border: 2px solid #000;
+}
+.power-hud .pk-bar i {
+  display: block;
+  height: 100%;
+  background: var(--pc);
+  transition: width 0.12s steps(6);
+}
+
+/* annonce d'objectif : grande au centre, puis rétrécit et monte vers le HUD */
+.quest-flash {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 9;
+}
+.quest-flash span {
+  max-width: 80vw;
+  text-align: center;
+  font-family: var(--pixel-font);
+  font-size: 22px;
+  line-height: 1.5;
+  color: #fde68a;
+  text-shadow: 3px 3px 0 #000, 0 0 18px rgba(253, 230, 138, 0.55);
+  padding: 14px 22px;
+  background: rgba(8, 10, 20, 0.55);
+  border: 2px solid rgba(253, 230, 138, 0.7);
+  transform-origin: top center;
+  animation: questFlash 4.2s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+@keyframes questFlash {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.6);
+  }
+  6% {
+    opacity: 1;
+    transform: translateY(0) scale(1.06);
+  }
+  14% {
+    transform: translateY(0) scale(1);
+  }
+  78% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-38vh) scale(0.34);
+  }
+}
+
 .prompt {
   position: absolute;
   left: 50%;
@@ -106,6 +284,7 @@ canvas {
   text-shadow: 2px 2px 0 #000;
   pointer-events: none;
   white-space: nowrap;
+  animation: promptIn 0.18s ease-out both;
 }
 
 .dialogue {
@@ -124,6 +303,18 @@ canvas {
   border: 3px solid #fff;
   box-shadow: 0 0 0 4px #000;
   padding: 16px 20px;
+  transform-origin: bottom center;
+  animation: boxIn 0.26s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.dialogue .caret {
+  margin-left: 1px;
+  color: currentColor;
+  animation: caretBlink 0.6s steps(2, start) infinite;
+}
+@keyframes caretBlink {
+  50% {
+    opacity: 0;
+  }
 }
 .dialogue .speaker {
   font-size: 14px;
@@ -168,6 +359,7 @@ canvas {
   box-shadow: 0 0 0 4px #000;
   padding: 16px 20px;
   color: #f1f5f9;
+  animation: combatIn 0.32s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
 }
 .combat-box .vs {
   text-align: center;
@@ -175,6 +367,7 @@ canvas {
   letter-spacing: 2px;
   color: #fca5a5;
   margin-bottom: 12px;
+  animation: vsShake 0.5s ease 0.12s both;
 }
 .combat-box .fighter {
   margin-bottom: 10px;
@@ -214,6 +407,108 @@ canvas {
   animation: blink 1s steps(2, start) infinite;
 }
 
+/* HUD du combat d'arène (temps réel) : vie de Joey en haut, la tienne en bas */
+.arena-top {
+  position: absolute;
+  top: 64px;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: min(460px, 92vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--pixel-font);
+  background: rgba(10, 12, 22, 0.82);
+  border: 2px solid #ef4444;
+  box-shadow: 0 0 0 3px #000;
+  padding: 10px 14px;
+  color: #f1f5f9;
+  pointer-events: none;
+  z-index: 8;
+  animation: combatIn 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+
+.arena-bottom {
+  position: absolute;
+  bottom: 26px;
+  left: 0;
+  right: 0;
+  margin-inline: auto;
+  width: min(460px, 92vw);
+  font-family: var(--pixel-font);
+  background: rgba(10, 12, 22, 0.82);
+  border: 2px solid #4ade80;
+  box-shadow: 0 0 0 3px #000;
+  padding: 10px 14px;
+  color: #f1f5f9;
+  pointer-events: none;
+  z-index: 8;
+  animation: combatIn 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3) both;
+}
+.arena-bottom .ah-foot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.ah-name {
+  width: 100%;
+  text-align: center;
+  font-size: 11px;
+  text-shadow: 2px 2px 0 #000;
+}
+.arena-top .bar,
+.arena-bottom .bar {
+  width: 100%;
+  height: 13px;
+  background: #23262e;
+  border: 2px solid #000;
+}
+.arena-top .bar span,
+.arena-bottom .bar span {
+  display: block;
+  height: 100%;
+  transition: width 0.12s steps(6);
+}
+.arena-top .bar.enemy span {
+  background: #ef4444;
+}
+.arena-bottom .bar.player span {
+  background: #4ade80;
+}
+.ah-ammo {
+  flex: 0 0 auto;
+  font-size: 15px;
+  color: #fde68a;
+  text-shadow: 2px 2px 0 #000;
+  white-space: nowrap;
+}
+.ah-log {
+  margin: 0 0 8px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #fca5a5;
+  min-height: 1.5em;
+}
+
+/* fondu au noir des transitions vers/depuis l'arène */
+.fade-screen {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 20;
+  transition: opacity 0.4s ease;
+}
+.fade-screen.on {
+  opacity: 1;
+}
+
 .overlay {
   position: absolute;
   inset: 0;
@@ -221,6 +516,7 @@ canvas {
   place-items: center;
   background: rgba(6, 8, 16, 0.72);
   backdrop-filter: blur(2px);
+  animation: fadeIn 0.25s ease both;
 }
 
 .panel {
@@ -232,6 +528,7 @@ canvas {
   box-shadow: 0 0 0 4px #000, 8px 8px 0 rgba(0, 0, 0, 0.5);
   padding: 28px 34px;
   max-width: 480px;
+  animation: panelIn 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.3) 0.05s both;
 }
 .panel h2 {
   margin: 0 0 14px;
@@ -241,6 +538,7 @@ canvas {
 }
 .panel.win h2 {
   color: #4ade80;
+  animation: winGlow 1.4s ease-in-out infinite alternate;
 }
 .panel p {
   margin: 8px 0;
@@ -253,6 +551,7 @@ canvas {
 .panel .big {
   font-size: 18px;
   color: #7dd3fc;
+  animation: bigPop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.5) 0.2s both;
 }
 
 .keys {
@@ -300,4 +599,126 @@ kbd {
   background: #2b2f3c;
   color: #e5e7eb;
   border-bottom-color: #0f1117;
+}
+
+/* ----------------------------------------------------- animations d'apparition */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes hudIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes promptIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+@keyframes boxIn {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+@keyframes combatIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.85) translateY(10px);
+  }
+  60% {
+    transform: scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+@keyframes vsShake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  20% {
+    transform: translateX(-3px);
+  }
+  40% {
+    transform: translateX(3px);
+  }
+  60% {
+    transform: translateX(-2px);
+  }
+  80% {
+    transform: translateX(2px);
+  }
+}
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes bigPop {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes winGlow {
+  from {
+    text-shadow: 0 0 4px rgba(74, 222, 128, 0.4);
+  }
+  to {
+    text-shadow: 0 0 14px rgba(74, 222, 128, 0.9), 0 0 26px rgba(74, 222, 128, 0.5);
+  }
+}
+
+/* respecte la préférence système « réduire les animations » */
+@media (prefers-reduced-motion: reduce) {
+  .hud-left,
+  .hud-center,
+  .hud-right,
+  .prompt,
+  .dialogue .box,
+  .combat-box,
+  .combat-box .vs,
+  .arena-top,
+  .arena-bottom,
+  .overlay,
+  .panel,
+  .panel .big,
+  .panel.win h2,
+  .dialogue .caret,
+  .quest-flash span,
+  .power-hud,
+  .power-hud .pk-bar i {
+    animation: none;
+  }
 }

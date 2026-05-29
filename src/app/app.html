@@ -5,7 +5,10 @@
   @case ('editor') {
     <app-editor (play)="onEditorPlay()" (exit)="onExit()" />
   }
+  @case ('menu') {
+    <app-menu (play)="onPlay($event)" (edit)="onEdit()" (back)="onBackHome()" />
+  }
   @default {
-    <app-menu (play)="onPlay($event)" (edit)="onEdit()" />
+    <app-home (play)="onStart()" (edit)="onEdit()" />
   }
 }

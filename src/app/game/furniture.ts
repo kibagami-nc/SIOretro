@@ -949,11 +949,21 @@ export const DEFAULT_LAYOUT: MapItem[] = [
   { type: 'rj45', x: 2, z: 0, rot: 3.141592653589793, y: 0.72 },
   { type: 'switch', x: -1.5, z: -0.5, rot: 1.5707963267948966, y: 0.72 },
   { type: 'switch', x: 10.55, z: -4, rot: 1.5707963267948966, y: 0.72 },
+  // --- alternants de la salle de classe (gauche) + personnages de la quête ---
+  { type: 'npc', x: -13, z: 1, rot: 4.71238898038469, char: 'loimata-tokava' },
+  { type: 'npc', x: -26.63, z: 1.5, rot: 1.5707963267948966, char: 'tyron-hanui' },
+  { type: 'npc', x: -26, z: 2.5, rot: 3.141592653589793, char: 'wasso-wahuzue' },
+  { type: 'npc', x: -17, z: 4.5, rot: 3.141592653589793, char: 'sherryl-tauraatua' },
+  { type: 'npc', x: -21.5, z: -0.5, rot: 4.71238898038469, char: 'jiji' },
+  { type: 'npc', x: -14, z: -1, rot: 0, char: 'urielle-zimmerlin' },
+  { type: 'npc', x: -14.5, z: 2.5, rot: 3.141592653589793, char: 'malaury-mounien' },
+  { type: 'npc', x: 28, z: -0.5, rot: 3.141592653589793, char: 'brutus' },
+  { type: 'npc', x: 30, z: 4.5, rot: 3.141592653589793, char: 'raphael' },
 ];
 
 // --------------------------------------------------------------- persistance
 
-const STORAGE_KEY = 'sioretro.map.v6';
+const STORAGE_KEY = 'sioretro.map.v7';
 
 export function loadLayout(): MapItem[] {
   try {

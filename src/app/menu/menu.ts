@@ -22,6 +22,7 @@ import { PreviewRenderer } from '../game/preview';
 export class MenuComponent implements AfterViewInit, OnDestroy {
   readonly play = output<Character>();
   readonly edit = output<void>();
+  readonly back = output<void>();
 
   // seuls les personnages jouables apparaissent dans la sélection (les PNJ
   // « npcOnly » restent plaçables dans l'éditeur mais ne sont pas jouables)
@@ -31,6 +32,11 @@ export class MenuComponent implements AfterViewInit, OnDestroy {
     () => this.characters.find((c) => c.id === this.selectedId()) ?? this.characters[0],
   );
   protected readonly accent = computed(() => cssColor(this.selected().color));
+  protected readonly accent2 = computed(() => cssColor(this.selected().accent));
+  protected readonly total = this.characters.length;
+  protected readonly index = computed(
+    () => this.characters.findIndex((c) => c.id === this.selectedId()) + 1,
+  );
   protected readonly statBars = computed(() => {
     const s = this.selected().stats;
     return [
@@ -62,6 +68,23 @@ export class MenuComponent implements AfterViewInit, OnDestroy {
     return cssColor(hex);
   }
 
+  /** numéro sur 2 chiffres (ex. 3 → « 03 ») */
+  protected pad(n: number): string {
+    return n.toString().padStart(2, '0');
+  }
+
+  /** initiale affichée dans la pastille du roster */
+  protected initial(c: Character): string {
+    return c.name.charAt(0).toUpperCase();
+  }
+
+  /** Découpe une stat 0-100 en 10 blocs (barre segmentée façon arcade). */
+  protected segments(value: number): boolean[] {
+    const total = 10;
+    const filled = Math.round((value / 100) * total);
+    return Array.from({ length: total }, (_, i) => i < filled);
+  }
+
   protected select(c: Character): void {
     this.selectedId.set(c.id);
   }
@@ -72,6 +95,10 @@ export class MenuComponent implements AfterViewInit, OnDestroy {
 
   protected openEditor(): void {
     this.edit.emit();
+  }
+
+  protected goBack(): void {
+    this.back.emit();
   }
 
   ngOnDestroy(): void {
