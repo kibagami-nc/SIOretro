@@ -19,6 +19,13 @@ import {
   buildZombieRaphael,
   type ArenaScene,
 } from './arena';
+import {
+  COURT_BOUNDS,
+  COURT_ORIGIN,
+  RIM,
+  buildCourt,
+  type CourtScene,
+} from './court';
 
 export interface Dialogue {
   name: string;
@@ -39,6 +46,21 @@ export interface CombatView {
   arena?: boolean;
   /** beignets en réserve (munitions du joueur) */
   ammo?: number;
+}
+
+/** État du défi basket 1v1 (terrain 3D) transmis au HUD. */
+export interface BasketView {
+  playerScore: number;
+  cpuScore: number;
+  target: number;
+  /** à qui de jouer / phase courante */
+  turn: 'intro' | 'player' | 'cpu' | 'over';
+  /** jauge de charge du tir 0..1 (pendant le tour du joueur) */
+  power: number;
+  log: string;
+  /** défini seulement en fin de match */
+  won?: boolean;
+  color: number;
 }
 
 /** État du pouvoir actif transmis au HUD. */
@@ -72,6 +94,10 @@ export interface EngineCallbacks {
   onFade: (visible: boolean) => void;
   /** état du pouvoir actif (null = masqué) */
   onPower: (p: PowerView | null) => void;
+  /** affiche/masque le mini-jeu Pong (défi de Weimin sur GameBoy) */
+  onPong: (active: boolean) => void;
+  /** état du défi basket 1v1 sur le terrain 3D (null = masqué) */
+  onBasket: (v: BasketView | null) => void;
 }
 
 interface Interactable {
@@ -89,6 +115,8 @@ interface Interactable {
 const HERO_ID = 'marius'; // Yorann
 const VILLAIN_ID = 'brutus'; // Joey
 const CAPTIVE_ID = 'raphael'; // Raphaël
+const CHALLENGER_ID = 'weimin'; // Weimin (défi Pong sur GameBoy)
+const BALLER_ID = 'louis'; // Louis (défi basket 1v1)
 
 const QUEST_LINES = {
   hero: 'Hé, toi ! Joey a encore enlevé Raphaël et l\'a planqué quelque part. '
@@ -96,7 +124,14 @@ const QUEST_LINES = {
   villainTaunt: 'Ha ! Raphaël est à MOI. Personne ne viendra le chercher !',
   villainDefeated: 'Aïe... j\'abandonne ! C\'est bon, reprends Raphaël... pour cette fois.',
   captiveStuck: 'Au secours... Joey m\'a enfermé ! Bats-le d\'abord, je t\'en supplie...',
-  captiveFreed: 'Mon héros ! Tu as mis une raclée à Joey et tu m\'as libéré. Merci infiniment !',
+  captiveFreed: 'Mon héros ! Tu as mis une raclée à Joey et tu m\'as libéré. Merci infiniment ! '
+    + 'Tiens, va voir Weimin là-bas — il paraît qu\'il a un défi pour toi.',
+  weiminChallenge: 'Alors c\'est toi qui as sauvé Raphaël ? Pas mal... mais es-tu vraiment doué ? '
+    + 'Affronte-moi en 1v1 sur ma GameBoy : un bon vieux Pong, premier à 3 points. '
+    + 'Prêt ? [E] pour lancer la partie !',
+  baller: 'Joli score sur la GameBoy ! Mais le vrai sport, c\'est le basket. '
+    + 'Viens, on se fait un 1v1 sur le terrain : premier à 5 paniers gagne. '
+    + 'Prêt ? [E] pour démarrer le match !',
 };
 
 const EYE_HEIGHT = 1.6;
@@ -123,6 +158,13 @@ const SPRINT_REGEN = 1 / 3.5; // jauge/s régénérée hors sprint
 /** Cadence cible : on bride le jeu à 30 images/s (1/30 s entre deux frames). */
 const FRAME_INTERVAL = 1 / 30;
 
+// --- défi basket : charge du tir + zone verte (panier) + IA de Louis ---
+const BK_CHARGE_RATE = 0.85; // puissance gagnée par seconde en maintenant
+const BK_SWEET_LO = 0.45; // zone verte (panier réussi) — large = accessible
+const BK_SWEET_HI = 0.7;
+const BK_SHOT_DUR = 1.0; // durée de l'arc du ballon
+const BK_CPU_MAKE = 0.4; // probabilité de réussite de Louis (battable)
+
 export class GameEngine {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -143,11 +185,22 @@ export class GameEngine {
   private hasQuest = false;
   private joeyDefeated = false;
   private raphaelFreed = false;
+  // défi Pong de Weimin puis défi basket de Louis (dernières étapes de la quête)
+  private weiminPresent = false;
+  private pongDone = false;
+  private pendingPong = false;
+  private louisPresent = false;
+  private basketDone = false;
+  private pendingBasket = false;
   private winTitle = 'MISSION ACCOMPLIE !';
   private winSub = 'Toute la classe a assuré 🎓';
 
+  /** un mini-jeu overlay (Pong sur GameBoy) est affiché : le moteur 3D est gelé
+   *  mais on garde le pointeur verrouillé pour ne pas rouvrir le menu pause. */
+  private minigameActive = false;
+
   // --- arène de boss (combat temps réel contre Joey) ---
-  private mode: 'explore' | 'arena' = 'explore';
+  private mode: 'explore' | 'arena' | 'basket' = 'explore';
   /** bornes de déplacement courantes (salle ou arène) */
   private bounds = PLAYER_BOUNDS;
   private arena?: ArenaScene;
@@ -191,6 +244,29 @@ export class GameEngine {
   private donutProj: { obj: THREE.Group; vel: THREE.Vector3; life: number }[] = [];
   private zombies: { obj: THREE.Group; hitCd: number; bob: number }[] = [];
 
+  // --- terrain de basket (défi 1v1 contre Louis, chacun son tour) ---
+  private court?: CourtScene;
+  private bkActive = false;
+  private bkStage: 'intro' | 'aim' | 'fly' | 'wait' | 'over' = 'intro';
+  private bkStageT = 0;
+  private bkPlayerScore = 0;
+  private bkCpuScore = 0;
+  private bkTarget = 5;
+  private bkLog = '';
+  private bkWon = false;
+  private bkCharging = false;
+  private bkPwr = 0;
+  // animation de balle (tir du joueur OU de Louis)
+  private bkAnim = false;
+  private bkAnimT = 0;
+  private bkMade = false;
+  private bkShooter: 'player' | 'cpu' = 'player';
+  private bkNext: 'player' | 'cpu' = 'cpu';
+  private bkTurnDelay = 0;
+  private readonly bkStart = new THREE.Vector3();
+  private readonly bkTargetPos = new THREE.Vector3();
+  private bkArc = 2.2;
+
   private velocity = new THREE.Vector3();
   private keys = { fwd: false, back: false, left: false, right: false };
 
@@ -233,6 +309,7 @@ export class GameEngine {
 
   private readonly onResize = () => this.resize();
   private readonly onKeyDown = (e: KeyboardEvent) => {
+    if (this.minigameActive) return; // les touches reviennent au mini-jeu overlay
     if (this.isInteractKey(e)) {
       e.preventDefault();
       this.onInteract();
@@ -246,6 +323,7 @@ export class GameEngine {
     this.setKey(e, true);
   };
   private readonly onKeyUp = (e: KeyboardEvent) => {
+    if (this.minigameActive) return;
     if (this.isInteractKey(e)) return;
     if (this.isPowerKey(e)) {
       this.powerUp();
@@ -257,9 +335,14 @@ export class GameEngine {
     if (!this.won && !this.disposed) this.controls.lock();
   };
   private readonly onMouseDown = (e: MouseEvent) => {
-    // clic gauche pendant le combat d'arène = lancer un beignet
-    if (e.button !== 0) return;
-    if (this.playing && this.mode === 'arena') this.throwDonut();
+    if (this.minigameActive || e.button !== 0 || !this.playing) return;
+    // clic gauche : lancer un beignet (arène) ou armer un tir (basket)
+    if (this.mode === 'arena') this.throwDonut();
+    else if (this.mode === 'basket') this.startBasketCharge();
+  };
+  private readonly onMouseUp = (e: MouseEvent) => {
+    if (this.minigameActive || e.button !== 0) return;
+    if (this.mode === 'basket') this.releaseBasketShot();
   };
 
   constructor(
@@ -396,6 +479,8 @@ export class GameEngine {
     // la quête démarre dès que Yorann est présent sur la map (il donne la mission)
     const present = new Set(this.interactables.map((it) => it.char));
     this.questActive = present.has(HERO_ID);
+    this.weiminPresent = present.has(CHALLENGER_ID);
+    this.louisPresent = present.has(BALLER_ID);
     this.cb.onQuest(this.questActive);
 
     this.camera.position.copy(room.spawn);
@@ -416,6 +501,9 @@ export class GameEngine {
       if (!this.hasQuest) text = 'Parle à Yorann — il a besoin de ton aide.';
       else if (!this.joeyDefeated) text = '⚔️ Retrouve Joey, bats-le et libère Raphaël !';
       else if (!this.raphaelFreed) text = '🔓 Joey est K.O. ! Va libérer Raphaël.';
+      else if (this.weiminPresent && !this.pongDone) text = '🎮 Va défier Weimin au Pong sur sa GameBoy !';
+      else if (this.louisPresent && !this.basketDone) text = '🏀 Défie Louis au basket en 1v1 !';
+      else if (this.basketDone || this.pongDone) text = '🏆 Tous les défis relevés ! Mission accomplie.';
       else text = 'Raphaël est libre ! 🎉';
       this.cb.onObjective(text);
       return;
@@ -437,15 +525,24 @@ export class GameEngine {
   }
 
   private onInteract(): void {
-    if (!this.playing || this.won || this.transitioning) return;
+    if (!this.playing || this.won || this.transitioning || this.minigameActive) return;
     // dans l'arène, [E] = lancer un beignet sur Joey
     if (this.mode === 'arena') {
       this.throwDonut();
       return;
     }
+    // sur le terrain de basket, le tir se fait à la souris : [E] ne fait rien
+    if (this.mode === 'basket') return;
     if (this.dialogueOpen) {
       this.closeDialogue();
       if (this.pendingWin) this.win();
+      else if (this.pendingPong) {
+        this.pendingPong = false;
+        this.startPong();
+      } else if (this.pendingBasket) {
+        this.pendingBasket = false;
+        this.startBasket();
+      }
       return;
     }
     const it = this.activeInteractable();
@@ -476,11 +573,28 @@ export class GameEngine {
         if (!this.joeyDefeated) {
           this.openDialogue({ name: it.name, line: QUEST_LINES.captiveStuck, color: it.color });
         } else {
-          // libérer Raphaël ne renvoie PAS au menu : on continue à explorer librement
           this.raphaelFreed = true;
           this.openDialogue({ name: it.name, line: QUEST_LINES.captiveFreed, color: it.color });
+          // s'il n'y a pas de Weimin sur la map, libérer Raphaël conclut la quête
+          if (!this.weiminPresent) {
+            this.winTitle = 'MISSION ACCOMPLIE !';
+            this.winSub = 'Raphaël est libre et toute la classe est sauvée 🎓';
+            this.pendingWin = true;
+          }
           this.updateObjective();
         }
+        return;
+      }
+      // étape : Weimin défie le héros à un Pong sur sa GameBoy
+      if (it.char === CHALLENGER_ID && this.raphaelFreed && !this.pongDone) {
+        this.pendingPong = true;
+        this.openDialogue({ name: it.name, line: QUEST_LINES.weiminChallenge, color: it.color });
+        return;
+      }
+      // étape finale : Louis défie le héros au basket en 1v1
+      if (it.char === BALLER_ID && this.pongDone && !this.basketDone) {
+        this.pendingBasket = true;
+        this.openDialogue({ name: it.name, line: QUEST_LINES.baller, color: it.color });
         return;
       }
     }
@@ -1068,6 +1182,12 @@ export class GameEngine {
       if (it.char === CAPTIVE_ID && this.joeyDefeated && !this.raphaelFreed) {
         return '[E] 🔓 Libérer Raphaël';
       }
+      if (it.char === CHALLENGER_ID && this.raphaelFreed && !this.pongDone) {
+        return '[E] 🎮 Défier Weimin au Pong';
+      }
+      if (it.char === BALLER_ID && this.pongDone && !this.basketDone) {
+        return '[E] 🏀 Défier Louis au basket';
+      }
     }
     return `[E] Parler à ${it.name}`;
   }
@@ -1077,6 +1197,296 @@ export class GameEngine {
     this.closeDialogue();
     this.controls.unlock();
     this.cb.onWin(Math.floor(this.elapsed), this.winTitle, this.winSub);
+  }
+
+  // ------------------------------------------------------- défi Pong (GameBoy)
+
+  /** Affiche le mini-jeu Pong de Weimin. On NE déverrouille PAS la souris : le
+   *  moteur 3D est simplement gelé (minigameActive), ce qui évite que le menu
+   *  pause ne s'ouvre quand la partie se termine. Le Pong se joue au clavier. */
+  private startPong(): void {
+    this.activePrompt = null;
+    this.cb.onPrompt(null);
+    this.minigameActive = true;
+    this.cb.onPong(true);
+  }
+
+  /** Résultat du Pong renvoyé par le composant.
+   *  Victoire : on enchaîne sur le défi basket de Louis (s'il est là), sinon fin. */
+  pongResult(won: boolean): void {
+    this.minigameActive = false;
+    this.cb.onPong(false);
+    this.dirty = true;
+    if (!won) {
+      // défaite : on reste en jeu (souris verrouillée) → le joueur peut réessayer
+      this.updateObjective();
+      return;
+    }
+    this.pongDone = true;
+    if (this.louisPresent) {
+      // une nouvelle quête s'ouvre : aller défier Louis au basket
+      this.updateObjective();
+    } else {
+      this.winTitle = 'CHAMPION DE PONG !';
+      this.winSub = 'Tu as battu Weimin sur sa GameBoy 🎮🏆';
+      this.updateObjective();
+      this.win();
+    }
+  }
+
+  // ------------------------------------------- défi basket (terrain 3D, Louis)
+
+  /** Téléporte le joueur sur le terrain de basket (transition fondu au noir). */
+  private startBasket(): void {
+    this.activePrompt = null;
+    this.cb.onPrompt(null);
+    this.transitioning = true;
+    this.savedPos.copy(this.camera.position);
+    this.savedQuat.copy(this.camera.quaternion);
+    this.cb.onFade(true);
+    clearTimeout(this.transitionTimer);
+    this.transitionTimer = setTimeout(() => this.enterCourt(), 420);
+  }
+
+  /** Configure le terrain derrière le fondu, puis dévoile la scène. */
+  private enterCourt(): void {
+    if (this.disposed) return;
+    if (!this.court) {
+      const louis = CHARACTERS.find((c) => c.id === BALLER_ID) ?? this.character;
+      this.court = buildCourt(louis);
+      this.scene.add(this.court.group);
+    }
+    this.court.group.visible = true;
+    this.bkPlayerScore = 0;
+    this.bkCpuScore = 0;
+    this.bkWon = false;
+    this.bkCharging = false;
+    this.bkPwr = 0;
+    this.bkAnim = false;
+    this.bkTurnDelay = 0;
+    this.bkStage = 'intro';
+    this.bkStageT = 0;
+    this.bkLog = `Premier à ${this.bkTarget} paniers ! Maintiens [clic] pour armer.`;
+    this.resetBallToPlayer();
+
+    // téléporte la caméra face au panier
+    this.camera.position.set(COURT_ORIGIN.x, EYE_HEIGHT, COURT_ORIGIN.z + 6);
+    this.camera.lookAt(COURT_ORIGIN.x, RIM.y, COURT_ORIGIN.z + RIM.z);
+    this.velocity.set(0, 0, 0);
+
+    this.mode = 'basket';
+    this.bkActive = true;
+    this.bounds = COURT_BOUNDS;
+    this.transitioning = false;
+    this.cb.onPower(null); // masque le HUD de pouvoir pendant le basket
+    this.cb.onFade(false);
+    this.emitBasket();
+  }
+
+  /** Repositionne le ballon dans les mains du joueur (coords locales au terrain). */
+  private resetBallToPlayer(): void {
+    if (!this.court) return;
+    const local = this.camera.position.clone().sub(COURT_ORIGIN);
+    local.y = 1.15;
+    local.z -= 0.9; // un peu devant, vers le panier
+    this.court.ball.position.copy(local);
+    this.bkAnim = false;
+  }
+
+  private emitBasket(): void {
+    let turn: BasketView['turn'];
+    if (this.bkStage === 'intro') turn = 'intro';
+    else if (this.bkStage === 'over') turn = 'over';
+    else if (this.bkStage === 'aim') turn = 'player';
+    else if (this.bkStage === 'fly') turn = this.bkShooter;
+    else turn = this.bkNext; // 'wait'
+    this.cb.onBasket({
+      playerScore: this.bkPlayerScore,
+      cpuScore: this.bkCpuScore,
+      target: this.bkTarget,
+      turn,
+      power: this.bkPwr,
+      log: this.bkLog,
+      won: this.bkStage === 'over' ? this.bkWon : undefined,
+      color: 0x22c55e,
+    });
+  }
+
+  private startBasketCharge(): void {
+    if (this.bkStage !== 'aim' || this.bkAnim) return;
+    this.bkCharging = true;
+    this.bkPwr = 0;
+    this.emitBasket();
+  }
+
+  private releaseBasketShot(): void {
+    if (!this.bkCharging) return;
+    this.bkCharging = false;
+    this.basketShoot(this.bkPwr);
+  }
+
+  /** Lance le ballon en arc : panier si la puissance tombe dans la zone verte. */
+  private basketShoot(p: number): void {
+    if (!this.court) return;
+    this.bkShooter = 'player';
+    this.bkMade = p >= BK_SWEET_LO && p <= BK_SWEET_HI;
+    this.bkStart.copy(this.court.ball.position);
+    if (this.bkMade) {
+      this.bkTargetPos.copy(RIM);
+    } else if (p < BK_SWEET_LO) {
+      // trop court : retombe devant l'arceau
+      const f = p / BK_SWEET_LO;
+      this.bkTargetPos.set(RIM.x, 0.9, THREE.MathUtils.lerp(this.bkStart.z, RIM.z, 0.45 + 0.4 * f));
+    } else {
+      // trop fort : passe au-dessus / derrière le panneau
+      this.bkTargetPos.set(RIM.x, 2.6, RIM.z - 1.3);
+    }
+    this.bkArc = 2.4;
+    this.bkAnim = true;
+    this.bkAnimT = 0;
+    this.bkStage = 'fly';
+    this.bkLog = this.bkMade ? 'Beau geste...' : p < BK_SWEET_LO ? 'Trop court !' : 'Trop fort !';
+    this.emitBasket();
+  }
+
+  /** Louis tente un panier (réussite aléatoire, battable). */
+  private cpuShoot(): void {
+    if (!this.court) return;
+    this.bkShooter = 'cpu';
+    this.bkMade = Math.random() < BK_CPU_MAKE;
+    this.bkStart.copy(this.court.louis.position).add(new THREE.Vector3(0, 1.7, -0.2));
+    this.court.ball.position.copy(this.bkStart);
+    if (this.bkMade) this.bkTargetPos.copy(RIM);
+    else this.bkTargetPos.set(RIM.x + 0.7, 1.2, RIM.z + 0.6);
+    this.bkArc = 2.6;
+    this.bkAnim = true;
+    this.bkAnimT = 0;
+    this.bkStage = 'fly';
+    this.bkLog = 'Louis tente sa chance...';
+    this.emitBasket();
+  }
+
+  private updateCourt(dt: number): void {
+    if (!this.court || !this.bkActive) return;
+
+    // décompte d'introduction
+    if (this.bkStage === 'intro') {
+      this.bkStageT += dt;
+      if (this.bkStageT >= 1.4) {
+        this.bkStage = 'aim';
+        this.bkLog = 'À toi ! Maintiens [clic] et relâche dans le vert.';
+        this.emitBasket();
+      }
+      return;
+    }
+
+    if (this.bkStage === 'over') return;
+
+    // charge de la puissance (tour du joueur)
+    if (this.bkCharging) {
+      this.bkPwr = Math.min(1, this.bkPwr + BK_CHARGE_RATE * dt);
+      if (this.bkPwr >= 1) this.releaseBasketShot(); // trop chargé = raté
+      this.emitBasket();
+    }
+
+    // arc du ballon (tir du joueur ou de Louis)
+    if (this.bkAnim) {
+      this.bkAnimT += dt / BK_SHOT_DUR;
+      const t = Math.min(1, this.bkAnimT);
+      const b = this.court.ball.position;
+      b.x = THREE.MathUtils.lerp(this.bkStart.x, this.bkTargetPos.x, t);
+      b.z = THREE.MathUtils.lerp(this.bkStart.z, this.bkTargetPos.z, t);
+      b.y = THREE.MathUtils.lerp(this.bkStart.y, this.bkTargetPos.y, t) + this.bkArc * 4 * t * (1 - t);
+      this.court.ball.rotation.x += dt * 9;
+      if (t >= 1) {
+        this.bkAnim = false;
+        this.resolveBasketShot();
+      }
+      return;
+    }
+
+    // temporisation entre deux tours
+    if (this.bkTurnDelay > 0) {
+      this.bkTurnDelay -= dt;
+      if (this.bkTurnDelay <= 0) {
+        if (this.bkNext === 'cpu') {
+          this.cpuShoot();
+        } else {
+          this.resetBallToPlayer();
+          this.bkStage = 'aim';
+          this.bkPwr = 0;
+          this.bkLog = 'À toi de jouer !';
+          this.emitBasket();
+        }
+      }
+    }
+  }
+
+  private resolveBasketShot(): void {
+    if (this.bkMade) {
+      if (this.bkShooter === 'player') {
+        this.bkPlayerScore++;
+        this.bkLog = 'PANIER ! 🏀';
+      } else {
+        this.bkCpuScore++;
+        this.bkLog = 'Louis marque !';
+      }
+    } else {
+      this.bkLog = this.bkShooter === 'player' ? 'Manqué... réessaie !' : 'Louis a manqué.';
+    }
+    if (this.checkBasketWin()) return;
+    // on alterne les tours
+    this.bkNext = this.bkShooter === 'player' ? 'cpu' : 'player';
+    this.bkStage = 'wait';
+    this.bkTurnDelay = 1.0;
+    this.emitBasket();
+  }
+
+  private checkBasketWin(): boolean {
+    if (this.bkPlayerScore >= this.bkTarget || this.bkCpuScore >= this.bkTarget) {
+      this.bkWon = this.bkPlayerScore > this.bkCpuScore;
+      this.bkStage = 'over';
+      this.bkLog = this.bkWon ? 'GAGNÉ ! 🏀🏆' : 'Perdu...';
+      this.emitBasket();
+      clearTimeout(this.transitionTimer);
+      this.transitionTimer = setTimeout(() => this.finishBasket(), 1900);
+      return true;
+    }
+    return false;
+  }
+
+  /** Fin du match : fondu, retour dans la salle, conclusion de la quête. */
+  private finishBasket(): void {
+    this.transitioning = true;
+    this.cb.onFade(true);
+    clearTimeout(this.transitionTimer);
+    this.transitionTimer = setTimeout(() => {
+      if (this.disposed) return;
+      this.bkActive = false;
+      this.mode = 'explore';
+      this.bounds = PLAYER_BOUNDS;
+      if (this.court) this.court.group.visible = false;
+      this.camera.position.copy(this.savedPos);
+      this.camera.quaternion.copy(this.savedQuat);
+      this.velocity.set(0, 0, 0);
+      this.cb.onBasket(null);
+      this.transitioning = false;
+      this.cb.onFade(false);
+      if (this.bkWon) {
+        this.basketDone = true;
+        this.winTitle = 'ROI DU TERRAIN !';
+        this.winSub = 'Pong gagné, basket gagné — tu as tout raflé 🏀🏆';
+        this.updateObjective();
+        this.win();
+      } else {
+        this.updateObjective();
+        this.openDialogue({
+          name: 'Louis',
+          line: 'Pas mal, mais le panier reste à moi ! Reviens quand tu veux ta revanche.',
+          color: 0x22c55e,
+        });
+      }
+    }, 420);
   }
 
   // --------------------------------------------------------------- entrées
@@ -1103,6 +1513,7 @@ export class GameEngine {
     document.addEventListener('keyup', this.onKeyUp);
     this.canvas.addEventListener('click', this.onCanvasClick);
     this.canvas.addEventListener('mousedown', this.onMouseDown);
+    document.addEventListener('mouseup', this.onMouseUp);
     this.clock.start();
     this.fpsLast = performance.now();
     this.loop();
@@ -1141,7 +1552,7 @@ export class GameEngine {
       this.fpsLast = nowMs;
     }
 
-    if (this.playing && !this.won) {
+    if (this.playing && !this.won && !this.minigameActive) {
       this.elapsed += dt;
       const whole = Math.floor(this.elapsed);
       if (whole !== this.lastWholeSecond) {
@@ -1149,7 +1560,7 @@ export class GameEngine {
         this.cb.onTime(whole);
       }
       if (this.transitioning) {
-        // pendant un fondu (entrée/sortie d'arène) le jeu est figé
+        // pendant un fondu (entrée/sortie d'arène ou de terrain) le jeu est figé
       } else if (this.mode === 'arena') {
         // arène : on bouge librement (pour ramasser les beignets) et on simule le boss
         if (this.aStage === 'fight') {
@@ -1157,6 +1568,10 @@ export class GameEngine {
           this.updatePower(dt);
         }
         this.updateArena(dt);
+      } else if (this.mode === 'basket') {
+        // terrain : le joueur est figé (il vise seulement à la souris) ; on ne
+        // simule que le ballon et le tour de Louis.
+        this.updateCourt(dt);
       } else if (!this.dialogueOpen) {
         this.updateMovement(dt);
         this.updatePower(dt);
@@ -1165,8 +1580,9 @@ export class GameEngine {
     }
 
     // en jeu : on rend chaque frame (la caméra suit la souris) ; sinon scène
-    // figée → un seul rendu après le dernier changement d'état.
-    if (this.playing || this.dirty) {
+    // figée → un seul rendu après le dernier changement d'état. Pendant un
+    // mini-jeu overlay (Pong) la scène 3D est masquée : inutile de la rendre.
+    if ((this.playing && !this.minigameActive) || this.dirty) {
       this.composer.render();
       this.dirty = false;
     }
@@ -1246,6 +1662,8 @@ export class GameEngine {
     if (!this.playing || this.won || this.transitioning || this.dialogueOpen) return;
     // en arène, le pouvoir n'est dispo que pendant la phase de combat
     if (this.mode === 'arena' && this.aStage !== 'fight') return;
+    // sur le terrain de basket, aucun pouvoir (et pas de déplacement)
+    if (this.mode === 'basket') return;
 
     if (this.powerKind === 'sprint') {
       this.sprinting = true;
@@ -1384,6 +1802,7 @@ export class GameEngine {
     document.removeEventListener('keyup', this.onKeyUp);
     this.canvas.removeEventListener('click', this.onCanvasClick);
     this.canvas.removeEventListener('mousedown', this.onMouseDown);
+    document.removeEventListener('mouseup', this.onMouseUp);
     try {
       this.controls.unlock();
     } catch {

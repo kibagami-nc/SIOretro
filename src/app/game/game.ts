@@ -14,11 +14,13 @@ import {
 } from '@angular/core';
 import type { Character } from '../characters';
 import { cssColor, CHARACTERS } from '../characters';
-import { CombatView, Dialogue, GameEngine, PowerView } from './engine';
+import { BasketView, CombatView, Dialogue, GameEngine, PowerView } from './engine';
+import { PongComponent } from './pong/pong';
 
 @Component({
   selector: 'app-game',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [PongComponent],
   templateUrl: './game.html',
   styleUrl: './game.scss',
 })
@@ -52,6 +54,10 @@ export class GameComponent implements AfterViewInit, OnDestroy {
   protected readonly fade = signal(false);
   /** pouvoir actif du personnage (HUD) */
   protected readonly power = signal<PowerView | null>(null);
+  /** mini-jeu Pong de Weimin affiché (défi GameBoy) */
+  protected readonly pong = signal(false);
+  /** défi basket 1v1 de Louis sur le terrain 3D (null = masqué) */
+  protected readonly basket = signal<BasketView | null>(null);
   /** objectif affiché en grand au centre avant de rétrécir vers le HUD */
   protected readonly questBanner = signal<string | null>(null);
   private banner?: ReturnType<typeof setTimeout>;
@@ -99,7 +105,9 @@ export class GameComponent implements AfterViewInit, OnDestroy {
   }
 
   protected readonly showIntro = computed(() => !this.started() && !this.won());
-  protected readonly showPause = computed(() => this.started() && !this.locked() && !this.won());
+  protected readonly showPause = computed(
+    () => this.started() && !this.locked() && !this.won() && !this.pong() && !this.basket(),
+  );
   protected readonly showProgress = computed(() => this.talkedTotal() > 0 && !this.questMode());
   protected readonly enemyHpPct = computed(() => {
     const c = this.combat();
@@ -157,12 +165,19 @@ export class GameComponent implements AfterViewInit, OnDestroy {
       onFps: (f) => this.fps.set(f),
       onFade: (v) => this.fade.set(v),
       onPower: (p) => this.power.set(p),
+      onPong: (a) => this.pong.set(a),
+      onBasket: (v) => this.basket.set(v),
     });
     this.engine.start();
   }
 
   protected play(): void {
     this.engine?.requestLock();
+  }
+
+  /** Résultat du mini-jeu Pong renvoyé par le composant. */
+  protected onPongResult(won: boolean): void {
+    this.engine?.pongResult(won);
   }
 
   /** Révèle le texte du dialogue caractère par caractère (effet rétro). */

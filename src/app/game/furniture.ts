@@ -819,6 +819,7 @@ export const DEFAULT_LAYOUT: MapItem[] = [
   { type: 'npc', x: 22.5, z: -4, rot: 4.71238898038469, char: 'weimin' },
   { type: 'npc', x: 17.5, z: 6.18, rot: 3.141592653589793, char: 'nathan' },
   { type: 'npc', x: 22.5, z: -5, rot: 4.71238898038469, char: 'jiji' },
+  { type: 'npc', x: 19, z: -1, rot: 3.141592653589793, char: 'louis' },
   // --- salle de classe (à gauche) ---
   { type: 'board', x: -26.92, z: 0, rot: -1.5707963267948966 },
   { type: 'table', x: -26.55, z: -4.5, rot: 1.5707963267948966 },

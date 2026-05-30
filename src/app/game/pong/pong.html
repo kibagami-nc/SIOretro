@@ -1,0 +1,48 @@
+<div class="pong-overlay">
+  <div class="gameboy">
+    <div class="gb-top">
+      <span class="gb-brand">SIO<b>BOY</b></span>
+      <span class="gb-vs">TOI&nbsp;VS&nbsp;{{ opponentName() }}</span>
+    </div>
+
+    <!-- écran -->
+    <div class="gb-screen">
+      <span class="gb-power">● POWER</span>
+      <div class="gb-bezel">
+        <canvas #screen class="gb-canvas"></canvas>
+        @if (phase() === 'over') {
+          <div class="gb-end" [class.win]="won()">
+            <p class="gb-end-title">{{ won() ? 'GAGNÉ !' : 'PERDU...' }}</p>
+            <p class="gb-end-sub">{{ playerScore() }} — {{ cpuScore() }}</p>
+          </div>
+        }
+      </div>
+      <span class="gb-name">SIO RETRO™</span>
+    </div>
+
+    <!-- commandes -->
+    <div class="gb-controls">
+      <div class="gb-dpad" aria-hidden="true">
+        <span class="d-v"></span>
+        <span class="d-h"></span>
+        <span class="d-hub"></span>
+      </div>
+      <div class="gb-ab" aria-hidden="true">
+        <span class="b">B</span>
+        <span class="a">A</span>
+      </div>
+    </div>
+
+    <div class="gb-hint">
+      <span><kbd>Z</kbd>/<kbd>S</kbd> ou <kbd>▲</kbd><kbd>▼</kbd> — bouge ta raquette · premier à {{ targetScore() }}</span>
+      <button class="gb-quit" (click)="forfeit()">ABANDONNER (ÉCHAP)</button>
+    </div>
+
+    <!-- bas de coque (sans écran) : haut-parleur en biais -->
+    <div class="gb-foot" aria-hidden="true">
+      <span class="gb-speaker">
+        <i></i><i></i><i></i><i></i><i></i><i></i>
+      </span>
+    </div>
+  </div>
+</div>

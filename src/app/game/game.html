@@ -103,6 +103,41 @@
     </div>
   }
 
+  <!-- mini-jeu Pong : défi de Weimin sur sa GameBoy -->
+  @if (pong()) {
+    <app-pong opponentName="Weimin" [targetScore]="3" (finished)="onPongResult($event)" />
+  }
+
+  <!-- défi basket 1v1 sur le terrain 3D : HUD (score + tour + jauge de tir) -->
+  @if (basket(); as b) {
+    <div class="basket-hud">
+      <div class="bk-top">
+        <span class="bk-score me">TOI {{ b.playerScore }}</span>
+        <span class="bk-target">premier à {{ b.target }}</span>
+        <span class="bk-score louis">{{ b.cpuScore }} LOUIS</span>
+      </div>
+
+      <div class="bk-turn" [class.over]="b.turn === 'over'">
+        @switch (b.turn) {
+          @case ('intro') { <span>🏀 Prépare-toi…</span> }
+          @case ('player') { <span>À TOI DE TIRER</span> }
+          @case ('cpu') { <span>AU TOUR DE LOUIS</span> }
+          @case ('over') { <span>{{ b.won ? 'GAGNÉ ! 🏆' : 'PERDU…' }}</span> }
+        }
+      </div>
+
+      @if (b.turn === 'player') {
+        <div class="bk-meter">
+          <span class="sweet"></span>
+          <i [style.width.%]="b.power * 100"></i>
+        </div>
+        <div class="bk-hint">Maintiens <kbd>CLIC</kbd> pour armer · relâche dans le vert</div>
+      }
+
+      <p class="bk-log">{{ b.log }}</p>
+    </div>
+  }
+
   <!-- intro -->
   @if (showIntro()) {
     <div class="overlay">

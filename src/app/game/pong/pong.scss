@@ -1,0 +1,262 @@
+:host {
+  --pixel-font: 'Press Start 2P', 'Courier New', monospace;
+  --gb-shell: #c9c9b6;
+  --gb-shell-dark: #a3a392;
+  --gb-screen: #6b7353;
+  --gb-lcd: #9bbc0f;
+  --gb-ink: #0f380f;
+  --gb-mag: #8a2d6b;
+}
+
+.pong-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 40%, rgba(20, 12, 40, 0.82), rgba(5, 3, 12, 0.96));
+  backdrop-filter: blur(2px);
+}
+
+/* coque GameBoy */
+.gameboy {
+  width: min(92vw, 340px);
+  padding: 18px 18px 46px;
+  border-radius: 14px 14px 58px 14px;
+  background: linear-gradient(160deg, var(--gb-shell), var(--gb-shell-dark));
+  box-shadow:
+    inset 0 2px 0 rgba(255, 255, 255, 0.5),
+    inset 0 -6px 12px rgba(0, 0, 0, 0.25),
+    0 18px 40px rgba(0, 0, 0, 0.55);
+  border: 2px solid #d8d8c8;
+  animation: gbIn 0.32s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+}
+
+@keyframes gbIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.92);
+  }
+}
+
+.gb-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-family: var(--pixel-font);
+}
+.gb-brand {
+  font-size: 9px;
+  color: var(--gb-mag);
+  letter-spacing: 1px;
+  b {
+    color: #1f2430;
+  }
+}
+.gb-vs {
+  font-size: 6px;
+  color: #5a5a4a;
+}
+
+/* zone écran */
+.gb-screen {
+  background: linear-gradient(150deg, #4a4f3a, var(--gb-screen));
+  border-radius: 8px 8px 22px 8px;
+  padding: 14px 22px 10px;
+  box-shadow: inset 0 3px 10px rgba(0, 0, 0, 0.5);
+}
+.gb-power {
+  display: block;
+  font-family: var(--pixel-font);
+  font-size: 5px;
+  color: #c0392b;
+  margin-bottom: 5px;
+  letter-spacing: 1px;
+}
+.gb-bezel {
+  position: relative;
+  border: 3px solid #1b1f14;
+  border-radius: 4px;
+  background: var(--gb-lcd);
+  overflow: hidden;
+}
+.gb-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 160 / 144;
+  image-rendering: pixelated;
+}
+
+/* écran de fin par-dessus le LCD */
+.gb-end {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(155, 188, 15, 0.78);
+  font-family: var(--pixel-font);
+  color: var(--gb-ink);
+  animation: endPop 0.25s ease both;
+}
+.gb-end-title {
+  font-size: 14px;
+  margin: 0;
+}
+.gb-end.win .gb-end-title {
+  text-shadow: 0 0 6px rgba(15, 56, 15, 0.6);
+}
+.gb-end-sub {
+  font-size: 9px;
+  margin: 0;
+}
+@keyframes endPop {
+  from {
+    opacity: 0;
+    transform: scale(0.85);
+  }
+}
+
+.gb-name {
+  display: block;
+  text-align: center;
+  font-family: var(--pixel-font);
+  font-size: 6px;
+  color: #2b2f22;
+  margin-top: 7px;
+  letter-spacing: 1px;
+}
+
+/* commandes cosmétiques */
+.gb-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 16px 6px 4px;
+}
+.gb-dpad {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  span {
+    position: absolute;
+    background: #2a2d33;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 2px 3px rgba(0, 0, 0, 0.35);
+  }
+  /* bras vertical (haut ↕ bas) sur toute la hauteur */
+  .d-v {
+    left: 19px;
+    top: 0;
+    width: 16px;
+    height: 54px;
+  }
+  /* bras horizontal sur toute la largeur */
+  .d-h {
+    left: 0;
+    top: 19px;
+    width: 54px;
+    height: 16px;
+  }
+  /* moyeu central */
+  .d-hub {
+    left: 19px;
+    top: 19px;
+    width: 16px;
+    height: 16px;
+    background: #1c1e22;
+    border-radius: 50%;
+    box-shadow: none;
+    z-index: 1;
+  }
+}
+.gb-ab {
+  display: flex;
+  gap: 10px;
+  transform: rotate(-20deg);
+  .a,
+  .b {
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #b14d8e, var(--gb-mag));
+    color: #fff;
+    font-family: var(--pixel-font);
+    font-size: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), 0 3px 4px rgba(0, 0, 0, 0.35);
+  }
+  .a {
+    transform: translateY(-8px);
+  }
+}
+
+.gb-hint {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+  font-family: var(--pixel-font);
+  font-size: 6px;
+  line-height: 1.7;
+  color: #4a4a3a;
+  kbd {
+    background: #2a2d33;
+    color: #f4f4e8;
+    border-radius: 3px;
+    padding: 1px 4px;
+    margin: 0 1px;
+  }
+}
+.gb-quit {
+  font-family: var(--pixel-font);
+  font-size: 6px;
+  color: #f4f4e8;
+  background: var(--gb-mag);
+  border: 2px solid #3a3a2a;
+  border-radius: 5px;
+  padding: 6px 10px;
+  cursor: pointer;
+  transition: filter 0.15s ease;
+  &:hover {
+    filter: brightness(1.2);
+  }
+}
+
+/* bas de coque allongé, sans écran : haut-parleur diagonal (déco DMG) */
+.gb-foot {
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-end;
+  min-height: 34px;
+  margin-top: 18px;
+  padding-right: 4px;
+}
+.gb-speaker {
+  display: flex;
+  gap: 5px;
+  transform: rotate(-25deg);
+  i {
+    width: 4px;
+    height: 26px;
+    border-radius: 3px;
+    background: linear-gradient(#9a9a88, #b6b6a4);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gameboy,
+  .gb-end {
+    animation: none;
+  }
+}
